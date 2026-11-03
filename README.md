@@ -26,7 +26,11 @@ cd ssh-plugin-dsh
 
 检查安装结果中的 `application` 和 `warnings`。`applied` 表示已应用；`restart-required` 表示需要重启对应 Harness 实例。此项目的构建和测试不会改动用户的 Harness profile，也不会自动安装插件。
 
-若安装旧版 1.0.0 后出现 `pending (waiting for services: required, optional)`，请重新安装 1.0.1 或更新版本。该错误来自插件的 Cordis 依赖声明，1.0.1 已同时修复宿主和客户端入口，并通过真实 Cordis 激活测试。
+**桌面版已启用但侧栏没有 SSH：** 在 DeepSeek Harness Desktop `0.2.1-rc.5` 中，新安装的插件可能已在后端运行，但当前页面仍使用桌面进程启动时的前端清单。请先结束需要保留的运行任务，再用 **⌘Q 完整退出 Harness 并重新打开**；只关闭窗口或刷新页面可能无法更新清单。重新打开后查看左侧 SSH 入口。若仍未出现，再检查前端插件加载错误，勿反复重装。
+
+若完整重启时报 `@local/dsh-plugin-ssh: import failed: process is not defined`，请更新至 **1.0.3**。这是旧客户端构建遗漏浏览器环境替换导致的错误。安装来源为本目录链接时，构建后的修复会直接生效；故障对话框中选择“重启”即可重新加载，无需禁用所有第三方插件。
+
+若安装旧版后出现 `pending (waiting for services: required, optional)` 或 `cannot get property "webServer" without inject`，请重新安装 1.0.2 或更新版本。前者来自 Cordis 依赖声明，后者来自旧版自定义 RPC 通道注册。1.0.2 使用 Harness 公开的 `/api/ssh-plugin/*` 精确 Fetch 路由，并已通过真实宿主服务、浏览器认证和 HTTP 调用验证。
 
 安装后：
 
@@ -90,10 +94,13 @@ npm --prefix frontend install --ignore-scripts
 npm run setup:backend
 npm run build
 npm run check
+npm run check:harness
 npm run pack:bundle
 ```
 
 正式分发使用 `pack:bundle`，产物在 `dist`。脚本生成 npm 可安装的 `.tgz`，逐项确认保留全部 1912 个原文件；避免 `npm pack` 默认过滤 `.orig`、`.gitignore` 等文件。归档自身保留原文件名；npm 安装时会把三个 `.gitignore` 改名为 `.npmignore`，完整性脚本会对改名后的相同内容继续校验。
+
+`check:harness` 需要已安装的 Harness，默认读取当前 Node 安装前缀中的 `@deepseek-ai/dsh`；其他安装方式可通过 `DSH_RUNTIME_DIR` 指向该包目录。它仅使用临时数据和随机回环端口，不修改现有 Harness profile 或用户凭据。
 
 后端安装脚本按当前平台选择官方发布包，逐段验证下载范围，校验完整 SHA-256 后仅提取可执行文件。[发布锁定清单](upstream-release-lock.json)包含官方 macOS ARM64/x64、Linux x64/ARM64、Windows x64 发布资产。安装脚本不通过 npm lifecycle 自动运行。
 

@@ -1,11 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { SSHService } from './src/service.js';
 import { toolDefinition } from './src/tools.js';
+import { registerHarnessRpc } from './src/harness-rpc.js';
 
 export const name = 'dsh-plugin-ssh';
-// Custom Connection RPC channels register an HTTP route in the caller's
-// context, so webServer must be declared here as well as connection.
-export const inject = ['tools', 'connection', 'webServer'];
+export const inject = ['tools', 'connection'];
 
 export async function apply(ctx, config = {}) {
   const integrations = {};
@@ -47,8 +46,5 @@ export async function apply(ctx, config = {}) {
   await service.start();
   const definitions = await service.tools();
   for (const upstream of definitions) ctx.effect(() => ctx.tools.register(toolDefinition(upstream, service)));
-  ctx.effect(() => ctx.connection.rpc.handle('/ssh-plugin', async (endpoint, payload, signal) => {
-    try { return { ok: true, value: await service.dispatch(endpoint, payload, signal) }; }
-    catch (error) { return { ok: false, error: { code: 'ssh/error', message: error.message || 'SSH operation failed.', details: {} } }; }
-  }));
+  registerHarnessRpc(ctx, service);
 }

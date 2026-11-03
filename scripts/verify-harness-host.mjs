@@ -46,10 +46,10 @@ try {
   const names = (Array.isArray(definitions) ? definitions : definitions.tools).map(tool => tool.name);
   assert.equal(names.length, 16);
   for (const name of names) assert.ok(ctx.get('tools').get(name), `missing registered tool: ${name}`);
-  const request = (method, payload, cookie) => fetch(`${base}/ssh-plugin/${method}`, {
+  const request = (endpoint, payload, cookie) => fetch(`${base}/api/ssh-plugin/${endpoint}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', origin: base, ...(cookie ? { cookie } : {}) },
-    body: JSON.stringify({ type: 'client-request', rpcId: 'ssh-host-verification', method, payload }),
+    body: JSON.stringify({ type: 'client-request', rpcId: 'ssh-host-verification', method: `ssh-plugin/${endpoint}`, payload }),
   });
   const unauthorized = await request('host', { method: 'capabilities' });
   assert.equal(unauthorized.status, 401, 'RPC must reject an unauthenticated browser');
@@ -59,6 +59,11 @@ try {
   const cookie = login.headers.get('set-cookie')?.split(';')[0];
   assert.ok(cookie, 'real Connection must issue a browser session cookie');
   await login.text();
+  const forbidden = await fetch(`${base}/api/ssh-plugin/host`, {
+    method: 'POST', headers: { origin: 'https://example.invalid', cookie, 'content-type': 'application/json' }, body: '{}',
+  });
+  assert.equal(forbidden.status, 403, 'RPC must reject a foreign Origin even with a valid cookie');
+  await forbidden.text();
   const capabilities = await request('host', { method: 'capabilities' }, cookie);
   assert.equal(capabilities.status, 200);
   assert.equal((await capabilities.json()).result.ok, true);
@@ -70,7 +75,7 @@ try {
   const removed = await request('host', { method: 'capabilities' }, cookie);
   assert.equal(removed.status, 404, 'RPC route must be removed after disposal');
   await removed.text();
-  console.log('Verified real Harness activation, 16 tools, authenticated HTTP RPC, unauthenticated rejection, and disposal.');
+  console.log('Verified real Harness activation, 16 tools, authenticated HTTP RPC, 401/403 rejection, and disposal.');
 } finally {
   await ctx.fiber.dispose();
   await fs.rm(directory, { recursive: true, force: true });

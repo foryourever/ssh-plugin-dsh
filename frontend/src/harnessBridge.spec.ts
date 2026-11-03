@@ -7,7 +7,7 @@ let deliver: (value:any)=>void;
 beforeEach(()=>{
   document.body.innerHTML='<div id="host-sentinel">Host</div><div id="dsh-ssh-root"></div>';
   updateContext({}); bridgeState.error='';bridgeState.prompt=null;
-  call=vi.fn(async(_namespace:string,endpoint:string,payload:any)=>endpoint==='events'?await new Promise(resolve=>{deliver=resolve;}):{ok:true,value:{method:payload.method,params:payload.params}});
+  call=vi.fn(async(_namespace:string,endpoint:string,payload:any)=>endpoint==='ssh-plugin/events'?await new Promise(resolve=>{deliver=resolve;}):{ok:true,value:{method:payload.method,params:payload.params}});
   dispose=installBridge({connection:{rpc:{call}}},document.getElementById('dsh-ssh-root')!);
 });
 afterEach(async()=>{await dispose?.();vi.restoreAllMocks();});
@@ -16,9 +16,9 @@ describe('native DBX bridge',()=>{
     await window.dbxPlugin.invoke('ssh/session/list',{connectionId:'a'});
     await window.dbxPlugin.request('host.getContext');
     await window.dbxPlugin.sendBinary('ssh/terminal/in/a',new Uint8Array([0,127,255]));
-    expect(call).toHaveBeenCalledWith('/ssh-plugin','request',{method:'ssh/session/list',params:{connectionId:'a'}});
-    expect(call).toHaveBeenCalledWith('/ssh-plugin','host',{method:'host.getContext',params:{}});
-    expect(call).toHaveBeenCalledWith('/ssh-plugin','binary',{channel:'ssh/terminal/in/a',data:'AH//'});
+    expect(call).toHaveBeenCalledWith('/api','ssh-plugin/request',{method:'ssh/session/list',params:{connectionId:'a'}});
+    expect(call).toHaveBeenCalledWith('/api','ssh-plugin/host',{method:'host.getContext',params:{}});
+    expect(call).toHaveBeenCalledWith('/api','ssh-plugin/binary',{channel:'ssh/terminal/in/a',data:'AH//'});
   });
   it('does not freeze the initial context in ready',async()=>{
     updateContext({connectionId:'selected',workbenchId:'workbench'});
@@ -42,6 +42,6 @@ describe('native DBX bridge',()=>{
   });
   it('hydrates storage through the host endpoint',async()=>{
     await window.dbxPlugin.storage!.set('ssh-font',13);
-    expect(call).toHaveBeenCalledWith('/ssh-plugin','host',{method:'host.storage.set',params:{key:'ssh-font',value:13}});
+    expect(call).toHaveBeenCalledWith('/api','ssh-plugin/host',{method:'host.storage.set',params:{key:'ssh-font',value:13}});
   });
 });

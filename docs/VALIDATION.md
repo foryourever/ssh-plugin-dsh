@@ -1,6 +1,6 @@
 # 验证记录
 
-验证环境：macOS ARM64，Node.js 22.23.1，2026-11-03。插件版本 1.0.1；上游 0.7.13-beta.1，提交 `93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b`。
+验证环境：macOS ARM64，Node.js 22.23.1，2026-11-03。插件版本 1.0.3；上游 0.7.13-beta.1，提交 `93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b`。
 
 ## 已通过
 
@@ -10,7 +10,8 @@
 | 官方后端 | 发布归档 SHA-256：`e079df9a96550c4db9a4c783e40af2174d1fcf2997710da274e66ca006344507`；提取的 ARM64 后端 SHA-256：`eac95e40fee45e9db545d82efcb505d4f8462ffd8166b93360381f528b4c10f6`。 |
 | 原版协议 | 真实后端完成 `plugin/initialize`，返回协议 1；`mcp/tools` 实际返回全部 16 个工具。 |
 | Harness Schema | 使用本机已安装 Harness 的真实 `assertObjectJsonSchema` / `assertSupportedJsonSchema`，16 个注册定义全部通过。 |
-| Host 测试 | `npm run check`：29 项通过，覆盖真实 Cordis 激活、分帧、UTF-8、多请求关联、二进制、反向用户输入、畸形及超长帧、进程退出、取消、超时、重启、加密存储、篡改拒绝、工具参数和注册资源释放。 |
+| Host 测试 | `npm run check`：31 项通过，覆盖真实 Cordis 激活、HTTP RPC 信封校验与取消信号、分帧、UTF-8、多请求关联、二进制、反向用户输入、畸形及超长帧、进程退出、取消、超时、重启、加密存储、篡改拒绝、工具参数和注册资源释放。 |
+| 真实 Harness 服务 | `npm run check:harness`：使用本机 Harness 0.2.0-rc.2 的真实 Connection、WebServer、ToolRuntime、SystemPrompt 和 Cordis；临时凭据存储、随机回环端口。确认插件 ACTIVE、16 个工具注册、真实 cookie 认证 HTTP 调用、未认证 401、跨源 403，以及卸载后工具和路由清理。 |
 | 真实 SSH/SFTP | 临时回环 SSH 服务端，临时 RSA 主机密钥与测试密码；真实 Rust 客户端执行命令、读取文件、写入并读取中文内容；只读连接写入被拒绝。服务端仅返回测试响应，未执行任意 shell 输入，未连接真实服务器。 |
 | 完整前端构建 | 约 24.78 MiB 的原生懒加载客户端，内置 Vue、全部工作台模块、CSS、字体/资源及 MP4v/PPTX worker；构建脚本拒绝遗漏的外部资源。React 来自宿主。 |
 | 前端类型 | 完整 `vue-tsc --noEmit` 通过。 |
@@ -23,12 +24,31 @@
 
 1.0.1 将宿主与客户端的依赖声明改为真实服务名数组；可选 AI 与工作区服务通过 `ctx.get()` 读取，避免缺少这些服务阻止基础 SSH 功能。新增测试使用真实 Cordis 容器加载宿主插件，分别验证 AI 服务存在和不存在时均达到 ACTIVE、注册 16 个工具并正确释放资源；客户端测试也经真实 Cordis 加载编译产物。此前直接调用 `apply()` 的测试没有覆盖这次依赖声明错误。
 
+## 1.0.2 HTTP 注册修复
+
+1.0.1 的 Cordis 测试仍使用模拟 Connection 服务，因此未覆盖实际 `connection.rpc.handle()` 注册自定义通道时的 `webServer` 依赖错误。已用真实 Harness 服务复现；仅给 SSH 插件增加 `webServer` 依赖也不能解决，因为检查发生在 Connection 的服务上下文。
+
+1.0.2 改用 `connection.fetch.register()` 在共享 `/api` 上注册四个精确 POST 路由，客户端同步使用 `ssh-plugin/*` 方法。Connection 继续负责 Host/Origin 检查、浏览器认证、请求体上限和断开取消，适配器校验 RPC 信封并保留关联 ID 和错误格式；无需修改 Harness 或绕过其安全检查。新脚本 `scripts/verify-harness-host.mjs` 使用真实宿主服务验证激活及 HTTP 调用，不依赖 Connection/WebServer 的模拟实现。
+
+## 桌面版侧栏入口检查（2026-11-03）
+
+在实际运行的 Desktop `0.2.1-rc.5` 中观察到：本地链接的 SSH 1.0.2 后端组件为“运行中”，当前页面 `window.__DSH_BOOT__.entries` 却没有 SSH 条目；控制台 `/plugins/events` 请求失败。完整页面刷新后，启动清单仍无 SSH。静态检查桌面应用 ASAR 中的 `lib/main.js` 确认：桌面进程在 `host.start()` 时保存 `ready.injections`，页面刷新沿用这份启动注入。因此此状态需要完整退出并重新启动桌面应用，以重新生成前端清单。已核对 SSH 的 `main`、`sidebar.panellist` 注册方式与随包内置插件一致；当时未重启用户应用，后续启动结果见 1.0.3 修复记录。
+
+## 1.0.3 浏览器启动修复
+
+实际桌面重启后，前端清单已包含 SSH，但导入报 `process is not defined`。此前的 Node / happy-dom 测试保留了 Node 全局变量，掩盖了这个问题。原因是 Vite 的 library 构建模式默认保留 Vue 等依赖中的 `process.env.NODE_ENV`。构建脚本现显式将其替换为 `"production"`，无需向 Harness 注入 Node 全局变量。
+
+客户端回归测试在生成产物的闭包内屏蔽 `process`、`Buffer` 和 `global`，修复前重现失败，修复后通过模块导入、Cordis 激活、侧栏注册、服务器管理页面挂载及添加服务器表单检查。
+
+实际 GUI 复查：修复构建完成后，运行中的 Harness 已显示左侧 **SSH** 入口及“添加服务器”表单（主机、端口、用户名和私钥认证字段）。未修改用户正在填写的内容，未保存或连接远端服务器。
+
 ## 可重复执行
 
 从项目根目录运行：
 
 ```bash
 npm run check
+npm run check:harness
 node --check client.js
 npm --prefix frontend run typecheck
 npm --prefix frontend test -- src/harnessRuntime.spec.mts src/harnessBridge.spec.ts src/lib/terminalInputQueue.spec.ts src/lib/workbenchCloseSessions.spec.ts

@@ -11,12 +11,14 @@ it('loads the emitted lazy module and mounts the complete native server manager'
  const React={createElement:(type:any,props:any,...children:any[])=>({type,props,children}),useRef:()=>({current:root}),useState:()=>['',()=>{}],useEffect:(fn:any)=>{effect=fn;}};
  (window as any).__ModuleLoader__={load:(value:any)=>{descriptor=value;}};
  const script=readFileSync('../client.js','utf8');
- new Function(script)();
+ // Harness's renderer has no Node globals. Keep this shadow in the bundle's
+ // closure so its lazy factory and mounted components have the same boundary.
+ new Function('process', 'Buffer', 'global', script)(undefined, undefined, undefined);
  expect(descriptor.id).toBe('@local/dsh-plugin-ssh');
  const plugin=descriptor.factory((name:string)=>{expect(name).toBe('react');return React;});
  const manifest=JSON.parse(readFileSync('../original/manifest.json','utf8'));
  const call=vi.fn(async(_namespace:string,endpoint:string,payload:any)=>{
-  if(endpoint==='events')return new Promise(()=>{});
+  if(endpoint==='ssh-plugin/events')return new Promise(()=>{});
   if(payload.method==='manifest')return {ok:true,value:manifest};
   if(payload.method==='connections.list')return {ok:true,value:{connections:[]}};
   if(payload.method==='capabilities')return {ok:true,value:{storage:true}};

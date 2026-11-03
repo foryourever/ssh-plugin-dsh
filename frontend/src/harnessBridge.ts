@@ -18,7 +18,7 @@ export function updateContext(context: Record<string, any>) { bridgeState.contex
 export async function openContext(context: Record<string, any>) { await closeWorkbench(); updateContext(context); }
 export function installBridge(ctx: any, root: HTMLElement) {
   let stopped = false; let pollTimer: ReturnType<typeof setTimeout> | undefined; const previousApi = window.dbxPlugin;
-  const rpc = async <T = any>(endpoint: string, payload: any): Promise<T> => { const result = await ctx.connection.rpc.call('/ssh-plugin', endpoint, payload); if (!result.ok) throw new Error(typeof result.error === 'string' ? result.error : result.error?.message || 'SSH bridge request failed.'); return result.value; };
+  const rpc = async <T = any>(endpoint: string, payload: any): Promise<T> => { const result = await ctx.connection.rpc.call('/api', `ssh-plugin/${endpoint}`, payload); if (!result.ok) throw new Error(typeof result.error === 'string' ? result.error : result.error?.message || 'SSH bridge request failed.'); return result.value; };
   hostCall = (method, params = {}) => rpc('host', { method, params });
   const request = <T = any>(method: string, params: any = {}): Promise<T> => method.startsWith('host.') ? hostCall(method, params) : rpc('request', { method, params });
   const files = new Map<string, File | { chunks: Uint8Array[]; name: string; contentType: string; size: number }>();
