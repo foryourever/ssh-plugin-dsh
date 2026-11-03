@@ -1,21 +1,65 @@
 # DeepSeek Harness SSH 插件
 
-将 [jinpy666/dbx-plugin-ssh](https://github.com/jinpy666/dbx-plugin-ssh) 适配为 DeepSeek Harness 的原生插件 bundle，让 Agent 调用 SSH/SFTP 工具，并在 Harness 侧栏打开原项目的完整终端工作台。
+在 DeepSeek Harness 中连接服务器，把终端、文件传输、服务器监控和 AI 运维放在同一个工作台里。
 
-上游版本 **0.7.13-beta.1**，固定提交 `93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b`。用户提供的源码 **1912 个文件全部保留**在 [original](original/README.md) 中，包括 Rust 后端、Vue 前端、共享 SDK、第三方 vendor、图标、演示媒体、测试、脚本和原文档。两个 Windows `.cmd` 文件只存在 CRLF/LF 差异；[来源清单](UPSTREAM.json)记录每个原文件的校验值。
+本项目基于 [jinpy666/dbx-plugin-ssh](https://github.com/jinpy666/dbx-plugin-ssh) 适配，复用其 Rust 后端和 Vue 终端工作台，并接入 Harness 的侧栏、连接管理与 Agent 工具服务。
+
+[安装使用](#安装) · [Agent 自动化](#agent-自动化) · [配置与开发](docs/ADAPTATION.md) · [验证记录](docs/VALIDATION.md) · [上游项目](https://github.com/jinpy666/dbx-plugin-ssh)
+
+## 先看效果
+
+![DeepSeek Harness SSH 工作台：SFTP 文件浏览、交互式终端与服务器监控](docs/images/harness-ssh-workbench.png)
+
+*在 Harness 侧栏打开 SSH，同时使用 SFTP、终端和 CPU、内存、磁盘、网络监控。*
+
+## 可以用它做什么
+
+| 场景 | 对应能力 |
+| --- | --- |
+| 日常巡检与问题排查 | 交互式终端、命令历史、快速命令、服务器指标与进程查看 |
+| 管理远程文件 | SFTP 浏览、预览、上传、下载、重命名和目录管理 |
+| 访问内网服务器 | 最多三跳 ProxyJump、连接保活和 Known Hosts 校验 |
+| 控制运维权限 | 只读模式、sudo 配置、命令白名单和操作审计 |
+| 自动化重复任务 | Harness Agent 复用已保存的连接，调用 SSH/SFTP 工具 |
+
+## 核心能力
+
+- **终端工作台**：PTY 交互终端、窗口调整、批量输入、快速命令、终端录制与远程目录跟随。
+- **SFTP 文件管理**：文件浏览、排序、预览、传输进度与取消；支持文件选择器和拖放上传。系统剪贴板文件粘贴取决于宿主是否提供原生 `paste` 文件事件。
+- **服务器监控**：CPU、内存、磁盘、网络趋势，以及进程、磁盘和容器管理面板。
+- **连接与认证**：密码、私钥、SSH Agent 和自动认证，保留上游跳板机、TOTP、键盘交互和受控提权能力。
+- **中文界面与主题**：创建连接的字段、说明和选项已中文化；私钥可通过「选择文件…」导入，工具栏与图表跟随 Harness 亮暗主题。
+- **会话保留**：返回服务器列表后再次打开当前连接，或在 Harness 侧栏之间切换，可以回到原工作台。需要结束时点击「断开连接」。刷新页面或退出 Harness 会结束当前客户端会话。
+- **Agent 与界面共享连接**：提供 16 个 SSH/SFTP 工具，支持在可见终端中执行 AI/MCP 命令，方便查看执行过程。
+
+当前主要面向 SSH/SFTP 运维。Telnet、串口、VNC、实验性 RDP 等上游实现仍保留，兼容情况与尚未验收的功能见[验证记录](docs/VALIDATION.md)。
 
 ## 安装
 
-先克隆本仓库：
+需要已安装的 DeepSeek Harness。仓库自带构建好的客户端和 **macOS ARM64** 后端；其他平台需先下载匹配的后端。
+
+### 1. 克隆仓库
 
 ```bash
 git clone https://github.com/foryourever/ssh-plugin-dsh.git
 cd ssh-plugin-dsh
 ```
 
-本目录已经包含构建好的客户端和经官方发布 SHA-256 校验的 **macOS ARM64** 后端，可直接作为本地 bundle 安装；安装后才会出现在当前 Harness 的侧栏和工具列表中。其他平台先按后文运行 `npm run setup:backend`。
+macOS ARM64 可直接继续安装。其他平台需要 Node.js 22+ 和 Python 3，在仓库目录运行：
 
-在能够调用 `plugin_manager` 的 Harness 会话中，执行以下请求，将 `target` 替换为克隆目录的绝对路径：
+```bash
+npm run setup:backend
+```
+
+脚本按当前平台下载锁定版本的官方后端，并校验 SHA-256。发布资产覆盖 macOS ARM64/x64、Linux x64/ARM64、Windows x64；当前运行验收环境为 macOS ARM64。
+
+### 2. 安装到 Harness
+
+在可调用 `plugin_manager` 的 Harness 会话中，让 Agent 安装本地插件目录，例如：
+
+> 使用 plugin_manager 安装本地 bundle，目录是 /absolute/path/to/ssh-plugin-dsh。
+
+对应工具参数如下，将 `target` 替换为克隆目录的**绝对路径**：
 
 ```json
 {
@@ -24,51 +68,28 @@ cd ssh-plugin-dsh
 }
 ```
 
-检查安装结果中的 `application` 和 `warnings`。`applied` 表示已应用；`restart-required` 表示需要重启对应 Harness 实例。此项目的构建和测试不会改动用户的 Harness profile，也不会自动安装插件。
+检查安装结果中的 `application` 和 `warnings`：`applied` 表示已应用，`restart-required` 表示需要重启对应 Harness 实例。
 
-**桌面版已启用但侧栏没有 SSH：** 在 DeepSeek Harness Desktop `0.2.1-rc.5` 中，新安装的插件可能已在后端运行，但当前页面仍使用桌面进程启动时的前端清单。请先结束需要保留的运行任务，再用 **⌘Q 完整退出 Harness 并重新打开**；只关闭窗口或刷新页面可能无法更新清单。重新打开后查看左侧 SSH 入口。若仍未出现，再检查前端插件加载错误，勿反复重装。
+### 3. 打开 SSH 工作台
 
-若完整重启时报 `@local/dsh-plugin-ssh: import failed: process is not defined`，请更新至 **1.0.3**。这是旧客户端构建遗漏浏览器环境替换导致的错误。安装来源为本目录链接时，构建后的修复会直接生效；故障对话框中选择“重启”即可重新加载，无需禁用所有第三方插件。
+1. 点击 Harness 左侧 **SSH**。
+2. 点击「添加服务器」，填写地址、端口、用户名和认证方式；私钥认证可点击「选择文件…」导入私钥。
+3. 保存并连接，使用终端、SFTP、服务器监控和端口映射等功能。
+4. 在 Harness 对话中让 Agent 使用已保存的连接执行任务。
 
-若安装旧版后出现 `pending (waiting for services: required, optional)` 或 `cannot get property "webServer" without inject`，请重新安装 1.0.2 或更新版本。前者来自 Cordis 依赖声明，后者来自旧版自定义 RPC 通道注册。1.0.2 使用 Harness 公开的 `/api/ssh-plugin/*` 精确 Fetch 路由，并已通过真实宿主服务、浏览器认证和 HTTP 调用验证。
+插件启用后由 Harness 管理，无需每次手动启动后端。编辑连接时，留空已有密码可保留原值，勾选清除选项才会清空。
 
-安装后：
+## Agent 自动化
 
-1. 点击侧栏 **SSH**。
-2. 添加服务器，选择密码、私钥或 SSH Agent 等认证方式。连接表单从原始 manifest 的所有字段生成；高级选项保留跳板机、sudo、TOTP、触发器和协议配置。
-3. 连接后进入原项目工作台，使用终端、SFTP、监控、隧道等功能。
-4. 在 Harness 会话中直接让 Agent 使用 `ssh_list_connections`，然后通过保存的连接名称或 ID 执行任务。
+直接在 Harness 中描述任务，Agent 可通过连接名称或 ID 使用已保存的服务器：
 
-例如：
-
-> 用 SSH 插件列出服务器，然后连接“测试服务器”，查看磁盘使用率和 Docker 容器状态。
+> 列出 SSH 服务器，连接“测试服务器”，查看磁盘使用情况和最近的错误日志。
 
 > 将本地配置上传到测试服务器，读取上传后的文件并核对内容。
 
-凭据建议在服务器表单中保存，Agent 使用连接 ID 或名称引用。编辑时留空保留已有密码；勾选清除选项才会清空。
+> 在测试服务器执行一个后台任务，然后查询任务状态。
 
-## 1.0.6 提示框位置修复
-
-修复「端口映射」等工具栏提示框在 Harness 中向右、向下偏移的问题：按插件容器坐标定位，并在容器边缘限制宽度、调整位置。窗口缩放时收起旧提示框；SSH 提示监听不会接管宿主按钮的 title。更新后请先完成当前操作，再刷新客户端加载新界面；刷新会结束当前会话。
-
-## 1.0.5 颜色修复
-
-恢复工具栏图标、连接状态与监控图表的颜色。Harness 入口补回原版主题桥，并提供缺失的蓝、绿、橙语义色；跟随宿主亮暗主题切换，宿主自定义颜色优先。更新后刷新客户端加载新界面。
-
-## 1.0.4 界面与会话更新
-
-创建/编辑连接的字段、说明与选项已中文化。私钥路径旁可「选择文件…」，支持无扩展名私钥；文件内容导入凭据字段，保存后加密存储，不会把浏览器的虚拟路径当成本机路径。
-
-返回服务器列表后点击当前连接会返回原会话；切换 Harness 侧栏也保留工作台。需要结束时使用「断开连接」。修复了窄文件面板的工具栏重叠，以及 CSS 隔离误改 `.sftp-body` 等类名的问题。更新后刷新客户端一次加载新界面；当前会话会随客户端刷新结束，请先完成正在进行的操作。
-
-## 功能与适配方式
-
-- **完整上游后端**：直接复用原版 Rust 可执行文件，保留 SSH 认证、最多三跳 ProxyJump、主机指纹校验、会话、PTY、SFTP、sudo、TOTP、端口转发、后台任务、录制、监控及原有策略逻辑。
-- **完整上游工作台**：将原 Vue 组件挂载在 Harness 原生 React 页面槽位中，不使用 iframe。客户端内置 Vue；React 由 Harness 提供；样式和弹层限制在插件区域内。
-- **全部原始 MCP 工具**：从运行中的原后端发现工具定义，再注册到 Harness 原生工具服务。当前固定版本实际返回 **16 个工具**，见下表；工具数以运行时清单为准。
-- **共享会话**：页面与 Agent 使用同一个后端实例，保留可见终端模式、原生认证挑战和运维审批事件。
-- **宿主桥接**：服务器管理、加密保存、UI 状态、浏览器文件选择/下载、剪贴板与 Harness AI 服务对接。AI 使用 Harness 已配置的模型，不另存 API Key。
-- **原项目全部内容**：完整原版独立保留；适配代码位于 [Host 入口](index.js)、[服务层](src/service.js)、[传输层](src/sidecar.js)及适配前端中。
+当前固定后端版本实际注册 **16 个工具**：
 
 | 类别 | 工具 |
 | --- | --- |
@@ -77,30 +98,32 @@ cd ssh-plugin-dsh
 | 主机指纹 | `ssh_list_known_hosts`、`ssh_remove_known_host` |
 | SFTP | `sftp_list_dir`、`sftp_stat`、`sftp_upload`、`sftp_download`、`sftp_read_file`、`sftp_write_file` |
 
-原始工具的联合参数约束、只读限制、危险命令检查、连接范围和 sudo 白名单继续生效。Harness 不支持的 MCP JSON Schema 关键字由适配层在调用前补充校验。
+工具数量以运行时清单为准。上游只读限制、危险命令检查、连接范围和 sudo 白名单继续生效。建议在服务器表单中保存凭据，让 Agent 引用连接，避免在对话中粘贴密码或私钥。
 
-## 数据与配置
+## 数据与安全
 
-默认数据目录为 `~/.dsh-ssh/default`；设置 `DSH_PROFILE` 时使用其名称作为子目录。也可通过 `DSH_SSH_DATA_DIR` 环境变量，或插件配置的 `dataDir` 显式指定独立目录。多个 Harness 实例需要独立数据时，应设置不同目录。
+- 连接数据默认保存在 `~/.dsh-ssh/default`；不同 `DSH_PROFILE` 使用不同子目录，也可通过 `DSH_SSH_DATA_DIR` 或插件 `dataDir` 配置指定位置。
+- 连接内容使用 AES-256-GCM 加密存储。密钥与密文都保存在本机数据目录，应一起备份；这不能隔离具有同一系统账户权限的进程。
+- Known Hosts、只读模式及 sudo 命令白名单沿用上游实现。插件不自动导入现有 DBX 应用中的连接。
+- 取消、超时或删除服务器可能重启整个后端，关闭其他活动会话；已被远端接受的命令可能继续运行。详细行为见[配置与维护说明](docs/ADAPTATION.md#数据与配置)。
 
-连接的全部内容（包括跳板机内嵌密码）使用 AES-256-GCM 加密。包装密钥与密文分别保存在数据目录中，目录权限为 `0700`，文件权限为 `0600`（Windows 使用平台权限语义）。这是本机文件加密，密钥和密文应一起备份；它不能保护已拥有同一系统账户访问权限的进程。
+## 常见问题
 
-后端自身的 Known Hosts、OTP vault、偏好、任务等仍由原后端在同一插件数据目录管理。系统的 SSH Known Hosts 仅按上游逻辑读取。适配器隔离了 DBX 应用桥，不导入或调用已有 DBX 应用的连接。
+### 后端已启用，但左侧没有 SSH 入口
 
-支持配置：
+在 DeepSeek Harness Desktop `0.2.1-rc.5` 中，新插件可能已在后端运行，但页面仍使用桌面进程启动时的前端清单。先完成当前任务，再 **⌘Q 完整退出 Harness 并重新打开**；只关闭窗口或刷新页面可能无法更新清单。重新打开后查看 SSH 入口。
 
-```yaml
-config:
-  dataDir: /absolute/path/to/ssh-plugin-data
-  backendPath: /absolute/path/to/dbx-plugin-ssh
-  requestTimeoutMs: 600000
-```
+### 更新后如何加载新界面
 
-`DSH_SSH_BACKEND` 也可覆盖后端路径。取消或超时会终止整个后端实例，所有当前会话会中断；已被远端接受的命令可能继续运行。再次调用会启动新实例。删除服务器也会重启后端，以清除原运行时注册表中的凭据，因此会关闭插件的其他活动会话。
+使用本地目录安装时，先在仓库中 `git pull`，再按安装结果处理重新加载或重启。已加载的页面需要刷新才能使用新客户端；请先完成当前操作，刷新会结束当前连接。旧版启动错误和历次修复见[维护说明](docs/ADAPTATION.md)。
 
-## 开发、构建与其他平台
+### 浏览器文件操作与 DBX 桌面版有什么区别
 
-需要 Node.js 22+。下载预编译后端还需要 Python 3；从 Rust 源码构建则需要 Cargo 及平台构建依赖。
+上传、下载与文件选择使用浏览器提供的能力，受宿主授权和内存限制。选择私钥文件会导入内容，保存后加密存储，不会把浏览器虚拟路径当成本机路径。不能假定支持 DBX 原生桌面的任意本机路径操作或流式落盘。
+
+## 开发与验证
+
+开发需要 Node.js 22+；下载后端需要 Python 3，从源码编译后端另需 Cargo 与平台构建依赖。
 
 ```bash
 npm install --ignore-scripts
@@ -112,28 +135,12 @@ npm run check:harness
 npm run pack:bundle
 ```
 
-正式分发使用 `pack:bundle`，产物在 `dist`。脚本生成 npm 可安装的 `.tgz`，逐项确认保留全部 1912 个原文件；避免 `npm pack` 默认过滤 `.orig`、`.gitignore` 等文件。归档自身保留原文件名；npm 安装时会把三个 `.gitignore` 改名为 `.npmignore`，完整性脚本会对改名后的相同内容继续校验。
+`check:harness` 需要本机已安装 Harness。正式分发包使用 `pack:bundle` 生成，输出到 `dist/`。前端类型检查、测试命令、平台构建和验证边界见[配置与开发](docs/ADAPTATION.md)及[验证记录](docs/VALIDATION.md)。构建和测试不会自动安装插件或修改用户的 Harness profile。
 
-`check:harness` 需要已安装的 Harness，默认读取当前 Node 安装前缀中的 `@deepseek-ai/dsh`；其他安装方式可通过 `DSH_RUNTIME_DIR` 指向该包目录。它仅使用临时数据和随机回环端口，不修改现有 Harness profile 或用户凭据。
+## 来源与许可
 
-后端安装脚本按当前平台选择官方发布包，逐段验证下载范围，校验完整 SHA-256 后仅提取可执行文件。[发布锁定清单](upstream-release-lock.json)包含官方 macOS ARM64/x64、Linux x64/ARM64、Windows x64 发布资产。安装脚本不通过 npm lifecycle 自动运行。
+感谢 [jinpy666/dbx-plugin-ssh](https://github.com/jinpy666/dbx-plugin-ssh) 提供的终端工作台与后端实现。本项目固定使用上游 **0.7.13-beta.1**，提交 `93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b`，并在 [original/](original/README.md) 中保留用户提供的全部 **1912 个原始文件**。来源与校验信息见 [UPSTREAM.json](UPSTREAM.json) 和[发布锁定清单](upstream-release-lock.json)。
 
-从保留的原始源码构建后端：
+本项目采用 **MIT** 许可，保留上游版权声明及第三方依赖的许可和归属。详见 [LICENSE](LICENSE)、[NOTICE](NOTICE)、[原版许可](original/LICENSE)与[第三方依赖清单](THIRD_PARTY_NPM.json)。
 
-```bash
-node scripts/setup-backend.mjs --build
-```
-
-构建不会修改原始源码目录，Cargo 输出写入插件的 `bin` 下。其他平台需要先执行后端安装脚本；当前交付目录自带的后端是 macOS ARM64。
-
-## 验证与边界
-
-已验证后端握手、16 个工具发现与 Harness Schema 兼容性、分帧协议、并发请求、反向认证输入、取消、超时、子进程清理、凭据加密及原版源码完整性。真实 SSH 测试只连接临时启动的 `127.0.0.1` 服务端，完成命令执行、SFTP 中文文件往返和只读写入拒绝，不使用真实服务器凭据。
-
-客户端构建成功，适配层另有前端测试。详细结果见[验证记录](docs/VALIDATION.md)。未更改当前运行的 Harness profile；1.0.4 已用隔离浏览器预览验证中文表单、系统文件选择器和窄文件面板布局。Rust 源码未重新编译；当前使用与源码版本一致的官方发布二进制。
-
-Telnet、串口、VNC、实验性 RDP、GPU/NPU 监控、真实跳板机、不同操作系统及全部文件预览格式需要对应环境才能逐项验收；原实现及界面均保留。RDP 仍保留原上游实验性质。浏览器文件操作按浏览器授权和内存限制工作，不能假定与 DBX 原生桌面的任意本机路径操作完全相同。
-
-## 许可
-
-保留上游 MIT 许可和所有 vendor 归属。参见 [LICENSE](LICENSE)、[NOTICE](NOTICE)及 [original/LICENSE](original/LICENSE)。本项目是独立适配，不代表上游作者或 DeepSeek 官方发布。
+这是面向 DeepSeek Harness 的独立适配项目，不代表上游作者或 DeepSeek 官方发布。

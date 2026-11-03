@@ -1,0 +1,80 @@
+# 适配、配置与维护
+
+本文说明 DeepSeek Harness 适配层的配置、构建、验证边界与历史修复。使用入口见[项目首页](../README.md)。
+
+## 数据与配置
+
+默认数据目录为 `~/.dsh-ssh/default`；设置 `DSH_PROFILE` 时使用其名称作为子目录。也可通过 `DSH_SSH_DATA_DIR` 环境变量，或插件配置的 `dataDir` 显式指定独立目录。多个 Harness 实例需要独立数据时，应设置不同目录。
+
+连接的全部内容（包括跳板机内嵌密码）使用 AES-256-GCM 加密。包装密钥与密文分别保存在数据目录中，目录权限为 `0700`，文件权限为 `0600`（Windows 使用平台权限语义）。这是本机文件加密，密钥和密文应一起备份；它不能保护已拥有同一系统账户访问权限的进程。
+
+后端自身的 Known Hosts、OTP vault、偏好、任务等仍由原后端在同一插件数据目录管理。系统的 SSH Known Hosts 仅按上游逻辑读取。适配器隔离了 DBX 应用桥，不导入或调用已有 DBX 应用的连接。
+
+支持配置：
+
+```yaml
+config:
+  dataDir: /absolute/path/to/ssh-plugin-data
+  backendPath: /absolute/path/to/dbx-plugin-ssh
+  requestTimeoutMs: 600000
+```
+
+`DSH_SSH_BACKEND` 也可覆盖后端路径。取消或超时会终止整个后端实例，所有当前会话会中断；已被远端接受的命令可能继续运行。再次调用会启动新实例。删除服务器也会重启后端，以清除原运行时注册表中的凭据，因此会关闭插件的其他活动会话。
+
+## 开发、构建与其他平台
+
+需要 Node.js 22+。下载预编译后端还需要 Python 3；从 Rust 源码构建则需要 Cargo 及平台构建依赖。
+
+```bash
+npm install --ignore-scripts
+npm --prefix frontend install --ignore-scripts
+npm run setup:backend
+npm run build
+npm run check
+npm run check:harness
+npm run pack:bundle
+```
+
+正式分发使用 `pack:bundle`，产物在 `dist`。脚本生成 npm 可安装的 `.tgz`，逐项确认保留全部 1912 个原文件；避免 `npm pack` 默认过滤 `.orig`、`.gitignore` 等文件。归档自身保留原文件名；npm 安装时会把三个 `.gitignore` 改名为 `.npmignore`，完整性脚本会对改名后的相同内容继续校验。
+
+`check:harness` 需要已安装的 Harness，默认读取当前 Node 安装前缀中的 `@deepseek-ai/dsh`；其他安装方式可通过 `DSH_RUNTIME_DIR` 指向该包目录。它仅使用临时数据和随机回环端口，不修改现有 Harness profile 或用户凭据。
+
+后端安装脚本按当前平台选择官方发布包，逐段验证下载范围，校验完整 SHA-256 后仅提取可执行文件。[发布锁定清单](../upstream-release-lock.json)包含官方 macOS ARM64/x64、Linux x64/ARM64、Windows x64 发布资产。安装脚本不通过 npm lifecycle 自动运行。
+
+从保留的原始源码构建后端：
+
+```bash
+node scripts/setup-backend.mjs --build
+```
+
+构建不会修改原始源码目录，Cargo 输出写入插件的 `bin` 下。其他平台需要先执行后端安装脚本；当前交付目录自带的后端是 macOS ARM64。
+
+## 验证与边界
+
+已验证后端握手、16 个工具发现与 Harness Schema 兼容性、分帧协议、并发请求、反向认证输入、取消、超时、子进程清理、凭据加密及原版源码完整性。真实 SSH 测试只连接临时启动的 `127.0.0.1` 服务端，完成命令执行、SFTP 中文文件往返和只读写入拒绝，不使用真实服务器凭据。
+
+客户端构建成功，适配层另有前端测试。详细结果见[验证记录](VALIDATION.md)。未更改当前运行的 Harness profile；1.0.4 已用隔离浏览器预览验证中文表单、系统文件选择器和窄文件面板布局。Rust 源码未重新编译；当前使用与源码版本一致的官方发布二进制。
+
+Telnet、串口、VNC、实验性 RDP、GPU/NPU 监控、真实跳板机、不同操作系统及全部文件预览格式需要对应环境才能逐项验收；原实现及界面均保留。RDP 仍保留原上游实验性质。浏览器文件操作按浏览器授权和内存限制工作，不能假定与 DBX 原生桌面的任意本机路径操作完全相同。
+
+## 历史修复
+
+### 1.0.6 提示框位置修复
+
+修复「端口映射」等工具栏提示框在 Harness 中向右、向下偏移的问题：按插件容器坐标定位，并在容器边缘限制宽度、调整位置。窗口缩放时收起旧提示框；SSH 提示监听不会接管宿主按钮的 title。更新后请先完成当前操作，再刷新客户端加载新界面；刷新会结束当前会话。
+
+### 1.0.5 颜色修复
+
+恢复工具栏图标、连接状态与监控图表的颜色。Harness 入口补回原版主题桥，并提供缺失的蓝、绿、橙语义色；跟随宿主亮暗主题切换，宿主自定义颜色优先。更新后刷新客户端加载新界面。
+
+### 1.0.4 界面与会话更新
+
+创建/编辑连接的字段、说明与选项已中文化。私钥路径旁可「选择文件…」，支持无扩展名私钥；文件内容导入凭据字段，保存后加密存储，不会把浏览器的虚拟路径当成本机路径。
+
+返回服务器列表后点击当前连接会返回原会话；切换 Harness 侧栏也保留工作台。需要结束时使用「断开连接」。修复了窄文件面板的工具栏重叠，以及 CSS 隔离误改 `.sftp-body` 等类名的问题。更新后刷新客户端一次加载新界面；当前会话会随客户端刷新结束，请先完成正在进行的操作。
+
+## 旧版启动错误
+
+若完整重启时报 `@local/dsh-plugin-ssh: import failed: process is not defined`，请更新至 **1.0.3**。这是旧客户端构建遗漏浏览器环境替换导致的错误。安装来源为本目录链接时，构建后的修复会直接生效；故障对话框中选择“重启”即可重新加载，无需禁用所有第三方插件。
+
+若安装旧版后出现 `pending (waiting for services: required, optional)` 或 `cannot get property "webServer" without inject`，请重新安装 1.0.2 或更新版本。前者来自 Cordis 依赖声明，后者来自旧版自定义 RPC 通道注册。1.0.2 使用 Harness 公开的 `/api/ssh-plugin/*` 精确 Fetch 路由，并已通过真实宿主服务、浏览器认证和 HTTP 调用验证。
