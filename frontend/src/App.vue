@@ -295,6 +295,7 @@ import { type TransferHistoryEntry } from "./lib/transferHistory";
 import { useTransferHistory } from "./composables/useTransferHistory";
 import { resolveSftpPaneOpen, sanitizeSftpPaneDefaultOpen, resolveDirectoryFollow, sanitizeDirectoryFollowPref, sanitizeSftpAutoConnectPref, shouldLazyLoadSftpListing, sanitizeWorkbenchLayoutPrefs, type SshWorkbenchPaneOrder } from "./lib/workbenchLayout";
 import { pickLiveSessionForReattach, pickProtocolSessionForReattach, type SessionSummary } from "./lib/sessionRestore";
+import { tooltipPosition } from "./lib/tooltipPosition";
 import { toolbarTintStyle } from "./lib/toolbarTint";
 import { createGhostClickGuard } from "./lib/ghostClickGuard";
 import {
@@ -2093,7 +2094,7 @@ function persistState() {
 // 全局接管 title 属性：悬停或键盘聚焦时把值挪到 data-tooltip（抑制原生慢速
 // 灰框），350ms 后显示主题化气泡；下方空间不足翻到上方。模板无需改动，所有
 // 现有和未来的 title 自动生效。
-const tooltip = ref<{ text: string; x: number; y: number; above: boolean; arrowOffset: number } | null>(null);
+const tooltip = ref<{ text: string; x: number; y: number; above: boolean; arrowOffset: number; maxWidth: number } | null>(null);
 const tooltipBubble = ref<HTMLElement>();
 let tooltipEl: HTMLElement | null = null;
 let tooltipTimer = 0;
@@ -2106,6 +2107,8 @@ function hideTooltip() {
 }
 
 function scheduleTooltip(target: HTMLElement) {
+  const surface = document.getElementById("dsh-ssh-root");
+  if (surface && (!surface.contains(target) || !surface.querySelector(".workbench")?.getClientRects().length)) return;
   // title → data-tooltip：Vue 绑定只在值变化时重写 title，下次触发再挪一次。
   const title = target.getAttribute("title");
   if (title !== null) {
@@ -2121,21 +2124,17 @@ function scheduleTooltip(target: HTMLElement) {
   tooltipTimer = window.setTimeout(() => {
     tooltipTimer = 0;
     if (!target.isConnected) return;
-    const rect = target.getBoundingClientRect();
-    const above = rect.bottom + 34 > window.innerHeight && rect.top > 34;
-    const center = rect.left + rect.width / 2;
-    tooltip.value = { text, x: center, y: above ? rect.top - 6 : rect.bottom + 6, above, arrowOffset: 0 };
-    // 量出气泡实际宽度后重新钳位，保证整框（而非仅中心点）落在视口内；
-    // 小三角按钳位偏差反向偏移，继续对准触发元素。
+    // Layout containment makes fixed descendants relative to the SSH surface.
+    // getBoundingClientRect() remains in viewport coordinates; convert once.
+    const position = (bubble?: HTMLElement) => tooltipPosition(
+      target.getBoundingClientRect(),
+      surface?.getBoundingClientRect() ?? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight },
+      bubble ? { width: bubble.offsetWidth, height: bubble.offsetHeight } : undefined,
+    );
+    tooltip.value = { text, ...position() };
     void nextTick(() => {
-      const bubble = tooltipBubble.value;
-      const current = tooltip.value;
-      if (!bubble || !current) return;
-      const half = bubble.offsetWidth / 2;
-      const clamped = Math.max(half + 8, Math.min(current.x, window.innerWidth - half - 8));
-      if (clamped !== current.x) {
-        tooltip.value = { ...current, x: clamped, arrowOffset: center - clamped };
-      }
+      if (tooltipEl !== target || !tooltip.value || !tooltipBubble.value) return;
+      tooltip.value = { text, ...position(tooltipBubble.value) };
     });
   }, 350);
 }
@@ -8780,6 +8779,7 @@ onMounted(() => {
   document.addEventListener("focusout", onTooltipFocusOut);
   document.addEventListener("pointerdown", hideTooltip, true);
   document.addEventListener("wheel", hideTooltip, true);
+  window.addEventListener("resize", hideTooltip);
   window.addEventListener("dbx:docker-open-in-terminal", handleDockerOpenInTerminal);
   window.addEventListener("dragleave", resetDragHighlightOnWindowLeave);
   hostFontObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
@@ -8803,6 +8803,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("focusout", onTooltipFocusOut);
   document.removeEventListener("pointerdown", hideTooltip, true);
   document.removeEventListener("wheel", hideTooltip, true);
+  window.removeEventListener("resize", hideTooltip);
   hostFontObserver.disconnect();
   hideTooltip();
   window.clearTimeout(persistTimer);
@@ -9535,7 +9536,7 @@ function flagHintsSource(command: string): string {
       </Popover>
     </header>
 
-    <div v-if="tooltip" ref="tooltipBubble" class="app-tooltip" :class="{ 'app-tooltip-above': tooltip.above }" :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px`, '--arrow-offset': `${tooltip.arrowOffset}px` }" role="tooltip">{{ tooltip.text }}</div>
+    <div v-if="tooltip" ref="tooltipBubble" class="app-tooltip" :class="{ 'app-tooltip-above': tooltip.above }" :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px`, '--arrow-offset': `${tooltip.arrowOffset}px`, maxWidth: `${tooltip.maxWidth}px` }" role="tooltip">{{ tooltip.text }}</div>
     <ToastProvider :label="t('notification')">
       <ToastRoot v-if="notice" :key="noticeKey" :open="noticeOpen" :duration="noticeActions.length ? 8000 : 3500" class="notice" @update:open="onNoticeOpenChange">
         <span>{{ notice }}</span>
