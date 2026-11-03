@@ -8230,16 +8230,22 @@ let lastStableFocus: HTMLElement | null = null;
 // click；决策逻辑走 ghostClickGuard 纯模块（有单测），真实鼠标点击放行。
 const ghostClickGuard = createGhostClickGuard();
 function onDocumentMouseDownCapture(event: MouseEvent) {
+  if (!document.getElementById('dsh-ssh-root')?.contains(event.target as Node)
+    || !document.querySelector('.workbench')?.getClientRects().length) return;
   ghostClickGuard.noteMouseDown();
   // 批量目标/高亮规则两个 popover 的点空白收起已移交 reka DismissableLayer
   // （pointerdown-outside → update:open(false)），capture 手动清扫移除。
 }
 function onDocumentClickCapture(event: MouseEvent) {
+  if (!document.getElementById('dsh-ssh-root')?.contains(event.target as Node)
+    || !document.querySelector('.workbench')?.getClientRects().length) return;
   if (!ghostClickGuard.shouldSuppress()) return;
   event.preventDefault();
   event.stopPropagation();
 }
 function trackStableFocus(event: FocusEvent) {
+  if (!document.getElementById('dsh-ssh-root')?.contains(event.target as Node)
+    || !document.querySelector('.workbench')?.getClientRects().length) return;
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   if (target.closest('[data-slot="dialog-content"]') || target.closest('[data-slot="context-menu-content"]')) return;
@@ -8337,6 +8343,8 @@ watch(modalOpenCount, (count, previous) => {
  * 逐层 if-return：无内容打开时按键穿透，不影响终端内 vim 等自身 Esc 语义。
  */
 function onDocumentKeydown(event: KeyboardEvent) {
+  if (!document.getElementById('dsh-ssh-root')?.contains(event.target as Node)
+    || !document.querySelector('.workbench')?.getClientRects().length) return;
   // Tab 焦点陷阱已移交 reka Dialog 的 FocusScope（每个弹层独立圈定，嵌套时顶层
   // 生效）；此处不再拦截 Tab。注意 FocusScope 的 keydown 挂在内容元素上，冒泡先于
   // 本 document 处理器，若恢复自制陷阱会与 reka 双步进，勿回退。

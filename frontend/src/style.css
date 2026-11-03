@@ -537,7 +537,7 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
 /* 窄面板（SFTP 置左 + 小窗口）下工具栏折行到第二行，按钮不再溢出压到终端；
    不用 overflow-x 滚动：折行即可容纳全部按钮（弹层已 portal 到 body，
    不再有滚动容器裁切问题，但折行布局本身仍是更稳的窄面板形态）。 */
-.path-toolbar { display: flex; height: auto; min-height: 38px; flex-wrap: wrap; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); padding: 3px 7px; }
+.path-toolbar { display: flex; flex: 0 0 auto; height: auto; min-height: 38px; flex-wrap: wrap; align-items: center; gap: 4px; border-bottom: 1px solid var(--border); padding: 3px 7px; }
 .path-toolbar .sudo-label { margin-left: 2px; }
 /* 容器查询按面板宽度（而非视口）整理窄面板布局：图标按 DOM 序自然折行，
    路径输入框独占一行沉底，sudo 开关隐去文字只留开关——行列对齐不零散。 */

@@ -1,5 +1,5 @@
 import { createApp } from 'vue';
-import { installBridge, bridgeState, closeWorkbench } from './harnessBridge';
+import { installBridge, bridgeState, closeWorkbench, updateContext } from './harnessBridge';
 import '@xterm/xterm/css/xterm.css';
 import './style.css';
 import './styles/tailwind.css';
@@ -9,16 +9,49 @@ export default {
   inject: ['slots', 'connection', 'locale'],
   apply(ctx: any) {
     const React = require('react');
+    // Harness unmounts pages on sidebar navigation. The plugin owns the Vue
+    // workbench so leaving SSH only detaches its surface; explicit disconnect
+    // and plugin disposal still release its PTYs and bridge resources.
+    const surface = document.createElement('div');
+    const parking = document.createElement('div');
+    parking.hidden = true;
+    parking.dataset.sshParking = '';
+    document.body.append(parking);
+    surface.id = 'dsh-ssh-root';
+    Object.assign(surface.style,{height:'100%',width:'100%',minHeight:'0',minWidth:'0',position:'relative',contain:'layout style',isolation:'isolate',overflow:'hidden'});
+    const style = document.createElement('style');
+    style.textContent = '__DSH_SSH_CSS__';
+    const vueMount = document.createElement('div');
+    vueMount.className = 'ssh-vue-mount';vueMount.style.height='100%';
+    surface.append(style,vueMount);
+    let disposed = false;let app: ReturnType<typeof createApp> | undefined;
+    let disposeBridge: (()=>Promise<void>) | undefined;
+    let booting: Promise<void> | undefined;
+    function boot() {
+      return booting ||= (async()=>{
+        disposeBridge = installBridge(ctx,surface);
+        const {default:HarnessApp} = await import('./HarnessApp.vue');
+        if(disposed)return;
+        app=createApp(HarnessApp);
+        app.config.errorHandler=(error:any)=>{bridgeState.error=String(error);};
+        app.mount(vueMount);
+      })();
+    }
+    ctx.effect(()=>async()=>{disposed=true;
+      await booting?.catch(()=>undefined);
+      await closeWorkbench();app?.unmount();await disposeBridge?.();
+      updateContext({});surface.remove();parking.remove();
+    });
     function SshPage() {
       const mount = React.useRef(null);
       const [failure, setFailure] = React.useState('');
       React.useEffect(() => {
-        let cancelled = false; let app: any; const dispose = installBridge(ctx, mount.current);
-        const boot = async () => { try { const [{default: HarnessApp}] = await Promise.all([import('./HarnessApp.vue')]); if(cancelled)return; app=createApp(HarnessApp); app.config.errorHandler=(error:any)=>{bridgeState.error=String(error);}; app.mount(mount.current.querySelector('.ssh-vue-mount')); } catch(error) { if(!cancelled)setFailure(String(error)); } };
-        void boot();
-        return () => { cancelled=true; void closeWorkbench(); app?.unmount(); void dispose(); };
+        const container=mount.current;let cancelled=false;
+        container.append(surface);
+        void boot().catch(error=>{if(!cancelled)setFailure(String(error));});
+        return () => {cancelled=true;if(surface.parentNode===container && !disposed)parking.append(surface);};
       }, []);
-      return React.createElement('div', { id:'dsh-ssh-root', ref:mount, style:{height:'100%',width:'100%',minHeight:0,minWidth:0,position:'relative',contain:'layout style',isolation:'isolate',overflow:'hidden'} }, React.createElement('style', null, '__DSH_SSH_CSS__'), failure ? React.createElement('div',{role:'alert'},failure) : null, React.createElement('div',{className:'ssh-vue-mount',style:{height:'100%'}}));
+      return React.createElement('div', { ref:mount, style:{height:'100%',minHeight:0,minWidth:0} }, failure ? React.createElement('div',{role:'alert'},failure) : null);
     }
     const label = () => ctx.locale?.text?.('ssh.title') || 'SSH';
     ctx.slots.inject('main', () => ctx.slots.register({name:'main',key:'ssh'},SshPage));
