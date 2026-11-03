@@ -2,3 +2,5 @@
 /bin/* binary
 /original/** -text
 /frontend/shared/** -text
+# Generated bundle embeds upstream multiline strings with intentional spaces.
+/client.js -whitespace

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { installBridge, updateContext, bridgeState } from './harnessBridge';
+import { installBridge, updateContext, bridgeState, openContext, closeWorkbench, createWorkbenchApi, selectWorkbench } from './harnessBridge';
 let dispose: (()=>Promise<void>) | undefined;
 let call: ReturnType<typeof vi.fn>;
 let deliver: (value:any)=>void;
@@ -10,7 +10,7 @@ beforeEach(()=>{
   call=vi.fn(async(_namespace:string,endpoint:string,payload:any)=>endpoint==='ssh-plugin/events'?await new Promise(resolve=>{deliver=resolve;}):{ok:true,value:{method:payload.method,params:payload.params}});
   dispose=installBridge({connection:{rpc:{call}}},document.getElementById('dsh-ssh-root')!);
 });
-afterEach(async()=>{await dispose?.();document.body.removeAttribute('style');vi.restoreAllMocks();});
+afterEach(async()=>{await closeWorkbench();await dispose?.();document.body.removeAttribute('style');vi.restoreAllMocks();});
 describe('native DBX bridge',()=>{
   it('routes host methods, original backend methods, and binary bytes through verified RPC envelopes',async()=>{
     await window.dbxPlugin.invoke('ssh/session/list',{connectionId:'a'});
@@ -66,5 +66,51 @@ describe('native DBX bridge',()=>{
   it('hydrates storage through the host endpoint',async()=>{
     await window.dbxPlugin.storage!.set('ssh-font',13);
     expect(call).toHaveBeenCalledWith('/api','ssh-plugin/host',{method:'host.storage.set',params:{key:'ssh-font',value:13}});
+  });
+  it('isolates context, title, state and close callbacks between sessions for the same connection',async()=>{
+    await openContext({connectionId:'a',connection:{name:'测试服务器'}});
+    const first=bridgeState.workbenches[0];
+    const a=createWorkbenchApi(first,()=>bridgeState.activeId===first.id);
+    const aContext=vi.fn();a.onContext?.(aContext);
+    await openContext({connectionId:'a',connection:{name:'测试服务器'}},true);
+    const second=bridgeState.workbenches[1];
+    const b=createWorkbenchApi(second,()=>bridgeState.activeId===second.id);
+    expect((await a.ready).workbenchId).not.toBe((await b.request<any>('host.getContext')).workbenchId);
+    await a.setTitle?.('第一会话');await b.setTitle?.('第二会话');
+    expect(bridgeState.title).toBe('第二会话');
+    await a.workbenchState?.set({sftpPath:'/a'});
+    expect((await a.ready).workbenchState).toEqual({sftpPath:'/a'});
+    expect((await b.ready).workbenchState).toBeUndefined();
+    selectWorkbench(first.id);
+    expect(bridgeState.title).toBe('第一会话');
+    expect(aContext).not.toHaveBeenCalled();
+    const closeA=vi.fn(),closeB=vi.fn();a.workbench?.onClose?.(closeA);b.workbench?.onClose?.(closeB);
+    await closeWorkbench(first.id);
+    expect(closeA).toHaveBeenCalledOnce();expect(closeB).not.toHaveBeenCalled();
+    expect(bridgeState.activeId).toBe(second.id);
+    await closeWorkbench();expect(closeB).toHaveBeenCalledOnce();
+  });
+  it('preserves duplicate-session transport and command options from the upstream toolbar',async()=>{
+    await window.dbxPlugin.openWorkbench?.('io.dbx.ssh.workbench',{connectionId:'a',reuseAuthenticatedTransport:true,reuseAuthenticatedSessionId:'source',spawnCommand:'pwd'},{forceNew:true});
+    await window.dbxPlugin.openWorkbench?.('io.dbx.ssh.workbench',{connectionId:'a'},{forceNew:true});
+    expect(bridgeState.workbenches).toHaveLength(2);
+    expect(bridgeState.workbenches[0].context).toMatchObject({connectionId:'a',reuseAuthenticatedTransport:true,reuseAuthenticatedSessionId:'source',spawnCommand:'pwd'});
+    expect(bridgeState.workbenches[1].context.workbenchId).not.toBe(bridgeState.workbenches[0].context.workbenchId);
+  });
+  it('routes file drag state only to the active workbench',async()=>{
+    await openContext({connectionId:'a'});
+    const first=bridgeState.workbenches[0];
+    const a=createWorkbenchApi(first,()=>bridgeState.activeId===first.id);
+    await openContext({connectionId:'b'});
+    const second=bridgeState.workbenches[1];
+    const b=createWorkbenchApi(second,()=>bridgeState.activeId===second.id);
+    const dragA=vi.fn(),dragB=vi.fn();a.fileTransfer?.onDragState(dragA);b.fileTransfer?.onDragState(dragB);
+    const event=new Event('dragover',{bubbles:true,cancelable:true});
+    Object.defineProperty(event,'dataTransfer',{value:{types:['Files']}});
+    document.getElementById('dsh-ssh-root')!.dispatchEvent(event);
+    expect(dragA).not.toHaveBeenCalled();expect(dragB).toHaveBeenCalledWith(true);
+    dragB.mockClear();selectWorkbench(first.id);
+    document.getElementById('dsh-ssh-root')!.dispatchEvent(event);
+    expect(dragA).toHaveBeenCalledWith(true);expect(dragB).not.toHaveBeenCalled();
   });
 });

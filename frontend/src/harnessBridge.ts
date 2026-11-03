@@ -1,11 +1,17 @@
 import { reactive } from 'vue';
-export const bridgeState = reactive({ context: {} as Record<string, any>, error: '', prompt: null as any, title: 'SSH', recommendations: [] as Array<{id:string;label:string;prompt:string}>, generation: 0 });
+export interface HarnessWorkbench {
+  id: string;
+  context: Record<string, any>;
+  title: string;
+}
+export const bridgeState = reactive({ context: {} as Record<string, any>, workbenches: [] as HarnessWorkbench[], activeId: '', error: '', prompt: null as any, title: 'SSH', recommendations: [] as Array<{id:string;label:string;prompt:string}>, generation: 0 });
 export let hostCall: <T = any>(method: string, params?: any) => Promise<T>;
 const events = new Set<(event: any) => void>();
 const binaries = new Set<(event: any) => void>();
 const contexts = new Set<(context: any) => void>();
 const appearances = new Set<(appearance: any) => void>();
 const closeListeners = new Set<() => any>();
+const workbenchCloses = new Map<string, Set<() => any>>();
 let cursor = 0;
 const bytes = (data: Uint8Array | ArrayBuffer | string) => typeof data === 'string' ? decodeBase64(data) : data instanceof Uint8Array ? data : new Uint8Array(data);
 export function encodeBase64(data: Uint8Array | ArrayBuffer) { const value = bytes(data); let text = ''; for (let i=0;i<value.length;i+=32768) text += String.fromCharCode(...value.subarray(i,i+32768)); return btoa(text); }
@@ -13,9 +19,74 @@ export function decodeBase64(data: string) { return Uint8Array.from(atob(data), 
 function dispatch<T>(listeners: Set<(value:T)=>void>, value:T) { for(const listener of listeners) { try { listener(value); } catch(error) { console.error('SSH event listener failed',error); } } }
 const subscribe = <T>(set: Set<T>, callback: T) => { set.add(callback); return () => set.delete(callback); };
 export const pluginRoot = () => document.getElementById('dsh-ssh-root') || document.createElement('div');
-export async function closeWorkbench() { const listeners=[...closeListeners];closeListeners.clear();await Promise.allSettled(listeners.map(fn => { try { return Promise.resolve(fn()); } catch(error) { return Promise.reject(error); } })); }
+export async function closeWorkbench(id?: string) {
+  const targets = id ? bridgeState.workbenches.filter(row => row.id === id) : [...bridgeState.workbenches];
+  const listeners = targets.flatMap(row => [...(workbenchCloses.get(row.id) || [])]);
+  for (const row of targets) workbenchCloses.delete(row.id);
+  if (!id) { listeners.push(...closeListeners); closeListeners.clear(); }
+  await Promise.allSettled(listeners.map(async fn => fn()));
+  const index = bridgeState.workbenches.findIndex(row => row.id === bridgeState.activeId);
+  const removed = new Set(targets.map(row => row.id));
+  bridgeState.workbenches = bridgeState.workbenches.filter(row => !removed.has(row.id));
+  if (!id || removed.has(bridgeState.activeId)) {
+    const next = bridgeState.workbenches[Math.max(0, index - 1)] || bridgeState.workbenches[0];
+    bridgeState.activeId = '';
+    if (next) selectWorkbench(next.id);
+    else { bridgeState.title = 'SSH'; updateContext({}); }
+  }
+}
 export function updateContext(context: Record<string, any>) { bridgeState.context = context; bridgeState.generation++; dispatch(contexts,context); }
-export async function openContext(context: Record<string, any>) { await closeWorkbench(); updateContext(context); }
+export function selectWorkbench(id: string) {
+  const entry = bridgeState.workbenches.find(row => row.id === id);
+  if (!entry) return;
+  bridgeState.activeId = id; bridgeState.title = entry.title; updateContext(entry.context);
+}
+export async function openContext(context: Record<string, any>, forceNew = false) {
+  const existing = !forceNew && bridgeState.workbenches.find(row => context.connectionId
+    ? row.context.connectionId === context.connectionId
+    : context.plugin?.mode === 'local-terminal' ? row.context.plugin?.mode === 'local-terminal' : row.context.id === context.id);
+  if (existing) { selectWorkbench(existing.id); return; }
+  const id = crypto.randomUUID();
+  const name = context.connection?.name || context.name || (context.plugin?.mode === 'local-terminal' ? 'Local terminal' : context.connectionId || 'SSH');
+  bridgeState.workbenches.push({ id, context: { ...context, workbenchId: id, surface: 'tab' }, title: name });
+  selectWorkbench(id);
+}
+
+// Each mounted workbench keeps its own context and close scope. Backend binary
+// events are still shared; the original handlers filter them by sessionId.
+export function createWorkbenchApi(entry: HarnessWorkbench, active: () => boolean): DbxPluginApi {
+  const base = window.dbxPlugin;
+  const ownContexts = new Set<(context: Record<string, unknown>) => void>();
+  const closes = new Set<() => any>();
+  workbenchCloses.set(entry.id, closes);
+  const reopen = async (connectionId: string) => {
+    const context = await hostCall<any>('host.reopenConnection', { connectionId });
+    entry.context = { ...entry.context, ...context, workbenchId: entry.id, surface: 'tab' };
+    if (bridgeState.activeId === entry.id) updateContext(entry.context);
+    dispatch(ownContexts, entry.context);
+    return entry.context;
+  };
+  const request = async <T = unknown>(method: string, params?: unknown): Promise<T> => method === 'host.getContext'
+    ? entry.context as T : method === 'host.reopenConnection' ? await reopen((params as any).connectionId) as T : base.request<T>(method, params);
+  const overrides: Partial<DbxPluginApi> = {
+    request, invoke: request,
+    onContext: fn => subscribe(ownContexts, fn),
+    reopenConnection: reopen,
+    async setTitle(title) { entry.title = title || 'SSH'; if (bridgeState.activeId === entry.id) bridgeState.title = entry.title; },
+    async getTitle() { return entry.title; },
+    workbench: { onClose: fn => subscribe(closes, fn) },
+    workbenchState: { async set(state) { entry.context = { ...entry.context, workbenchState: state }; } },
+    fileTransfer: base.fileTransfer && { ...base.fileTransfer,
+      onDrop: fn => base.fileTransfer!.onDrop((...args) => { if (active()) fn(...args); }),
+      onDragState: fn => base.fileTransfer!.onDragState(value => { if (active()) fn(value); }),
+    },
+  };
+  return new Proxy(base, { get(target, property) {
+    if (property === 'ready') return Promise.resolve(entry.context);
+    if (property === 'context') return entry.context;
+    return property in overrides ? Reflect.get(overrides, property) : Reflect.get(target, property);
+  } });
+}
 export function installBridge(ctx: any, root: HTMLElement) {
   let stopped = false; let pollTimer: ReturnType<typeof setTimeout> | undefined; const previousApi = window.dbxPlugin;
   const rpc = async <T = any>(endpoint: string, payload: any): Promise<T> => { const result = await ctx.connection.rpc.call('/api', `ssh-plugin/${endpoint}`, payload); if (!result.ok) throw new Error(typeof result.error === 'string' ? result.error : result.error?.message || 'SSH bridge request failed.'); return result.value; };
@@ -46,7 +117,7 @@ export function installBridge(ctx: any, root: HTMLElement) {
     clipboard:{readText:()=>navigator.clipboard.readText(),writeText:text=>navigator.clipboard.writeText(text)},
     async saveFile(options,data){download(options.fileName,options.contentType||'application/octet-stream',[bytes(data) as BlobPart]);return {path:options.fileName};},
     reopenConnection:connectionId=>hostCall('host.reopenConnection',{connectionId}),
-    async openWorkbench(contributionId,context={}) { if(context.connectionId) await openContext(await hostCall('connections.connect',{id:context.connectionId})); else if((context.plugin as any)?.mode==='local-terminal') await openContext({...context,workbenchId:crypto.randomUUID(),surface:'tab'}); else if(contributionId.includes('tunnel')) await openContext({...context,id:context.id||bridgeState.context.connectionId,name:'SSH tunnels',workbenchId:crypto.randomUUID()}); },
+    async openWorkbench(contributionId,context={},options={}) { if(context.connectionId) await openContext({...await hostCall('connections.connect',{id:context.connectionId}),...context}, options.forceNew); else if((context.plugin as any)?.mode==='local-terminal') await openContext(context,options.forceNew); else if(contributionId.includes('tunnel')) await openContext({...context,id:context.id||bridgeState.context.connectionId,name:'SSH tunnels'}); },
     async setTitle(title){bridgeState.title=title||'SSH';},async getTitle(){return bridgeState.title;},
     workbenchState:{async set(state){bridgeState.context={...bridgeState.context,state};}},workbench:{onClose:fn=>subscribe(closeListeners,fn)},
   };

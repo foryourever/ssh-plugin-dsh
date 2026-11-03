@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { Terminal } from "@xterm/xterm";
+import { useWorkbenchApi, workbenchScopeKey } from "./lib/workbenchApi";
+const workbenchApi = useWorkbenchApi();
+const workbenchScope = inject(workbenchScopeKey, null);
+const workbenchRoot = () => document.getElementById(workbenchScope?.rootId || "dsh-ssh-root") || document.getElementById("dsh-ssh-root");
+const workbenchActive = () => !workbenchScope || workbenchScope.active();
 import { FitAddon } from "@xterm/addon-fit";
 import { ImageAddon } from "@xterm/addon-image";
 import { WebglAddon } from "@xterm/addon-webgl";
@@ -674,7 +679,7 @@ const aiFixBar = ref<{ command: string; exitCode: number; output: string; anchor
 const aiOutputCapture = new TailCapture();
 let aiOutputDecoder = new TextDecoder("utf-8", { fatal: false });
 function aiBridgeOk(): boolean {
-  return aiBridgeAvailable(window.dbxPlugin);
+  return aiBridgeAvailable(workbenchApi);
 }
 function updateAiSettings(patch: Partial<AiSettings>) {
   aiSettingsState.value = sanitizeAiSettings({ ...aiSettingsState.value, ...patch });
@@ -1610,7 +1615,7 @@ const terminalInputQueue = createTerminalInputQueue({
     // 通道按会话身份选择（telnet: 前缀 / 本地会话 / SSH，见
     // terminalInputChannel）：本地会话误发 ssh 通道会被 sidecar 的 SSH
     // 会话表拒收，表现为终端看似在线却打不进字。
-    return window.dbxPlugin.sendBinary(terminalInputChannel(sessionId, localSession.value?.sessionId), payload);
+    return workbenchApi.sendBinary(terminalInputChannel(sessionId, localSession.value?.sessionId), payload);
   },
   onError: (cause) => {
     terminalDiag.errors += 1;
@@ -1640,7 +1645,7 @@ const serialInputQueue = createTerminalInputQueue({
   frameTag: SERIAL_STREAM_STDIN,
   send: (sessionId, payload) => {
     if (!sessionId.startsWith("serial:")) return;
-    return window.dbxPlugin
+    return workbenchApi
       .sendBinary(`serial/terminal/in/${sessionId.slice("serial:".length)}`, payload)
       .catch((cause: unknown) => {
         serialBinaryInput.value = false;
@@ -1654,9 +1659,9 @@ const locale = ref("zh-CN");
 const t = (key: string, values: Record<string, string | number> = {}) => workbenchMessage(locale.value, key, values);
 let syncWorkbenchTitle: ReturnType<typeof createWorkbenchTitleSync> | undefined;
 watch([locale, () => (hostContext.value.connection as { name?: string } | undefined)?.name], ([value, name]) => {
-  document.title = name || workbenchMessage(value, "pluginName");
-  if (name && window.dbxPlugin) {
-    syncWorkbenchTitle ??= createWorkbenchTitleSync(window.dbxPlugin);
+  if (!workbenchScope) document.title = name || workbenchMessage(value, "pluginName");
+  if (name && workbenchApi) {
+    syncWorkbenchTitle ??= createWorkbenchTitleSync(workbenchApi);
     void syncWorkbenchTitle(name);
   }
 }, { immediate: true });
@@ -2074,7 +2079,7 @@ function writeWorkbenchState() {
   } catch {
     // 存储不可用（沙箱降级链耗尽）：会话恢复态照写，全局偏好退化为本次会话。
   }
-  return window.dbxPlugin.workbenchState?.set({
+  return workbenchApi.workbenchState?.set({
     sessionId: session.value?.sessionId,
     terminalSequence: lastSequence,
     ...uiMirror,
@@ -2107,7 +2112,7 @@ function hideTooltip() {
 }
 
 function scheduleTooltip(target: HTMLElement) {
-  const surface = document.getElementById("dsh-ssh-root");
+  const surface = workbenchRoot();
   if (surface && (!surface.contains(target) || !surface.querySelector(".workbench")?.getClientRects().length)) return;
   // title → data-tooltip：Vue 绑定只在值变化时重写 title，下次触发再挪一次。
   const title = target.getAttribute("title");
@@ -2140,6 +2145,7 @@ function scheduleTooltip(target: HTMLElement) {
 }
 
 function onTooltipOver(event: MouseEvent) {
+  if (!workbenchActive()) return;
   const target = (event.target as HTMLElement | null)?.closest?.("[title], [data-tooltip]") as HTMLElement | null;
   if (target === tooltipEl) return;
   hideTooltip();
@@ -2148,6 +2154,7 @@ function onTooltipOver(event: MouseEvent) {
 }
 
 function onTooltipOut(event: MouseEvent) {
+  if (!workbenchActive()) return;
   if (!tooltipEl) return;
   const related = event.relatedTarget as HTMLElement | null;
   if (related && tooltipEl.contains(related)) return;
@@ -2157,6 +2164,7 @@ function onTooltipOut(event: MouseEvent) {
 // 键盘可达性：focusin/focusout 走同一套气泡（focus 锚定元素本身，
 // 不依赖指针位置），blur 时收起。
 function onTooltipFocusIn(event: FocusEvent) {
+  if (!workbenchActive()) return;
   const target = (event.target as HTMLElement | null)?.closest?.("[title], [data-tooltip]") as HTMLElement | null;
   if (target === tooltipEl) return;
   hideTooltip();
@@ -2165,6 +2173,7 @@ function onTooltipFocusIn(event: FocusEvent) {
 }
 
 function onTooltipFocusOut(event: FocusEvent) {
+  if (!workbenchActive()) return;
   if (!tooltipEl) return;
   const related = event.relatedTarget as HTMLElement | null;
   if (related && tooltipEl.contains(related)) return;
@@ -2236,6 +2245,7 @@ const {
   t, showNotice, appearance, terminalAppearance, terminalFontOverride, terminalFontSize,
   terminalWriteThrottle, terminalSyncOutput,
   terminal: () => terminal,
+  root: () => workbenchRoot() || document.documentElement,
   scheduleFit,
   setTerminalFont: (family, size) => setTerminalFont(family, size),
 });
@@ -3192,7 +3202,7 @@ async function submitAiSearch(query: string) {
   const trimmed = query.trim();
   closeAiSearch();
   if (!trimmed) return;
-  const api = window.dbxPlugin;
+  const api = workbenchApi;
   if (aiCompletionAvailable(api)) {
     // 等待态：提示条切 loading（query 冻结显示），Esc 可放弃；令牌防迟到
     // 结果回填。listAiModels/generateText 两段 await 全程在 pending 内。
@@ -3234,7 +3244,7 @@ async function submitAiSearch(query: string) {
 let fixRecommendationPushed = false;
 function pushFixRecommendation() {
   const bar = aiFixBar.value;
-  const api = window.dbxPlugin;
+  const api = workbenchApi;
   if (!bar || fixRecommendationPushed || !aiRecommendationsAvailable(api)) return;
   fixRecommendationPushed = true;
   void setAiRecommendations(api, {
@@ -3245,7 +3255,7 @@ function pushFixRecommendation() {
 function clearFixRecommendation() {
   if (!fixRecommendationPushed) return;
   fixRecommendationPushed = false;
-  void clearAiRecommendations(window.dbxPlugin).catch(() => undefined);
+  void clearAiRecommendations(workbenchApi).catch(() => undefined);
 }
 
 /** 本地白名单分诊（ssh/alert/triage 既有 RPC，best-effort）：category +
@@ -3253,7 +3263,7 @@ function clearFixRecommendation() {
 async function aiFixTriageHint(output: string): Promise<string | undefined> {
   if (!output.trim()) return undefined;
   try {
-    const view = await window.dbxPlugin.invoke<{ category?: string; suggestions?: Array<{ command?: string }> }>("ssh/alert/triage", { payload: output });
+    const view = await workbenchApi.invoke<{ category?: string; suggestions?: Array<{ command?: string }> }>("ssh/alert/triage", { payload: output });
     const commands = (view?.suggestions ?? []).map((item) => item?.command).filter((c): c is string => typeof c === "string" && c.length > 0).slice(0, 3);
     if (!view?.category && !commands.length) return undefined;
     return [`category=${view?.category ?? "unknown"}`, ...(commands.length ? [`whitelisted suggestions: ${commands.join("; ")}`] : [])].join(", ");
@@ -3269,7 +3279,7 @@ async function aiFixTriageHint(output: string): Promise<string | undefined> {
 async function aiFixFromBar() {
   const bar = aiFixBar.value;
   if (!bar) return;
-  const api = window.dbxPlugin;
+  const api = workbenchApi;
   if (!aiBridgeOk()) {
     showNotice(t("aiFix.unavailable"));
     return;
@@ -3333,7 +3343,7 @@ async function aiAssistFromTerminal() {
   }
   const selection = terminal?.hasSelection() ? (terminal.getSelection() ?? "") : "";
   const raw = selection || readTerminalTailLines(40);
-  const sent = await openAiConversation(window.dbxPlugin, buildAiAssistRequest({ query: "", selection: prepareAiOutputSnapshot(raw), context: aiContextExtras(), agentMode: aiSettingsState.value.agentMode })).catch(() => false);
+  const sent = await openAiConversation(workbenchApi, buildAiAssistRequest({ query: "", selection: prepareAiOutputSnapshot(raw), context: aiContextExtras(), agentMode: aiSettingsState.value.agentMode })).catch(() => false);
   showNotice(t(sent ? "aiAssist.sentNotice" : "aiAssist.unavailable"));
 }
 
@@ -3559,8 +3569,8 @@ function sendTerminalBytes(data: Uint8Array) {
       serialInputQueue.enqueue(`serial:${serialSession.value.sessionId}`, normalizeTerminalInputBytes(data));
       return;
     }
-    const dataBase64 = window.dbxPlugin.encodeBase64(normalizeTerminalInputBytes(data));
-    void window.dbxPlugin.invoke("serial/write", { sessionId: serialSession.value.sessionId, dataBase64 }).catch((cause) => showError(cause, "terminal"));
+    const dataBase64 = workbenchApi.encodeBase64(normalizeTerminalInputBytes(data));
+    void workbenchApi.invoke("serial/write", { sessionId: serialSession.value.sessionId, dataBase64 }).catch((cause) => showError(cause, "terminal"));
     return;
   }
   // Telnet 会话优先：同一终端视图同一时刻只挂一个会话（SSH/本地/Telnet 互斥），
@@ -3588,11 +3598,11 @@ function scheduleFit() {
       const sshSessionId = activeTerminalSessionId || session.value?.sessionId;
       if (telnetSession.value) {
         // Telnet NAWS：sidecar 发 SB NAWS 子协商，尽力而为。
-        void window.dbxPlugin.notify("telnet/resize", { sessionId: telnetSession.value.sessionId, cols: terminal.cols, rows: terminal.rows }).catch(() => undefined);
+        void workbenchApi.notify("telnet/resize", { sessionId: telnetSession.value.sessionId, cols: terminal.cols, rows: terminal.rows }).catch(() => undefined);
       } else if (localSession.value) {
-        void window.dbxPlugin.notify("local/terminal/resize", { sessionId: localSession.value.sessionId, cols: terminal.cols, rows: terminal.rows }).catch(() => undefined);
+        void workbenchApi.notify("local/terminal/resize", { sessionId: localSession.value.sessionId, cols: terminal.cols, rows: terminal.rows }).catch(() => undefined);
       } else if (sshSessionId) {
-        void window.dbxPlugin.notify("ssh/terminal/resize", { sessionId: sshSessionId, cols: terminal.cols, rows: terminal.rows }).catch(() => undefined);
+        void workbenchApi.notify("ssh/terminal/resize", { sessionId: sshSessionId, cols: terminal.cols, rows: terminal.rows }).catch(() => undefined);
       }
     } catch {
       // The iframe can briefly be detached while DBX switches tabs.
@@ -3974,7 +3984,7 @@ function handleBinary(event: DbxPluginBinaryEvent) {
   if (event.channel.startsWith("local/terminal/out/")) {
     const localId = event.channel.slice("local/terminal/out/".length);
     if (!localSession.value || localId !== localSession.value.sessionId) return;
-    const payload = bridgeBinaryBytes(event, window.dbxPlugin.decodeBase64);
+    const payload = bridgeBinaryBytes(event, workbenchApi.decodeBase64);
     if (payload.length < 9) return;
     const sequence = readU64(payload, 1);
     if (sequence <= localLastSequence.value) return;
@@ -3987,7 +3997,7 @@ function handleBinary(event: DbxPluginBinaryEvent) {
     // sequence/pending 状态避免与 SSH/本地流互染。
     const telnetId = event.channel.slice("telnet/terminal/out/".length);
     if (!telnetSession.value || telnetId !== telnetSession.value.sessionId) return;
-    const payload = bridgeBinaryBytes(event, window.dbxPlugin.decodeBase64);
+    const payload = bridgeBinaryBytes(event, workbenchApi.decodeBase64);
     if (payload.length < 9) return;
     const sequence = readU64(payload, 1);
     if (sequence <= telnetLastSequence.value) return;
@@ -4000,7 +4010,7 @@ function handleBinary(event: DbxPluginBinaryEvent) {
     // 恒为 Stdout），独立 sequence/pending 状态避免与其它会话流互染。
     const serialId = event.channel.slice("serial/terminal/out/".length);
     if (!serialSession.value || serialId !== serialSession.value.sessionId) return;
-    const payload = bridgeBinaryBytes(event, window.dbxPlugin.decodeBase64);
+    const payload = bridgeBinaryBytes(event, workbenchApi.decodeBase64);
     if (payload.length < 9) return;
     // B1 解码契约：未知流标签（> Stdin=3）一律静默丢帧并计数，不断连。
     if (!isKnownStreamTag(payload[0])) {
@@ -4018,7 +4028,7 @@ function handleBinary(event: DbxPluginBinaryEvent) {
     // 交给 VncSurface 解码 + rAF 合帧绘制；乱序帧在组件内丢弃。
     const vncId = event.channel.slice("vnc/frame/".length);
     if (!vncSession.value || vncId !== vncSession.value.sessionId) return;
-    const payload = bridgeBinaryBytes(event, window.dbxPlugin.decodeBase64);
+    const payload = bridgeBinaryBytes(event, workbenchApi.decodeBase64);
     if (vncState.value !== "running") vncState.value = "running";
     vncSurface.value?.acceptFrame(payload);
     return;
@@ -4028,14 +4038,14 @@ function handleBinary(event: DbxPluginBinaryEvent) {
     // vncFrame），sequence 跨重连单调。首个桌面帧同时把状态推到 running。
     const rdpId = event.channel.slice("rdp/frame/".length);
     if (!rdpSession.value || rdpId !== rdpSession.value.sessionId) return;
-    const payload = bridgeBinaryBytes(event, window.dbxPlugin.decodeBase64);
+    const payload = bridgeBinaryBytes(event, workbenchApi.decodeBase64);
     if (rdpState.value.state !== "running") rdpState.value = { ...rdpState.value, state: "running" };
     rdpSurface.value?.acceptFrame(payload);
     return;
   }
   const sessionId = activeTerminalSessionId || session.value?.sessionId;
   if (sessionId && event.channel === `ssh/terminal/out/${sessionId}`) {
-    const payload = bridgeBinaryBytes(event, window.dbxPlugin.decodeBase64);
+    const payload = bridgeBinaryBytes(event, workbenchApi.decodeBase64);
     if (payload.length < 9) return;
     const sequence = readU64(payload, 1);
     if (sequence <= lastSequence) return;
@@ -4046,7 +4056,7 @@ function handleBinary(event: DbxPluginBinaryEvent) {
   const taskId = event.channel.startsWith("sftp/download/") ? event.channel.slice("sftp/download/".length) : "";
   const waiter = downloadChunkWaiters.get(taskId);
   if (!waiter) return;
-  const payload = bridgeBinaryBytes(event, window.dbxPlugin.decodeBase64);
+  const payload = bridgeBinaryBytes(event, workbenchApi.decodeBase64);
   if (payload.length < 8 || readU64(payload, 0) !== waiter.offset) return;
   window.clearTimeout(waiter.timer);
   downloadChunkWaiters.delete(taskId);
@@ -4092,7 +4102,7 @@ function drainTerminalFrames() {
     // ssh-transport-disconnected state frame stuck behind it would otherwise
     // freeze the drain forever and the tab keeps claiming "connected".
     let sessionGone = false;
-    void window.dbxPlugin.invoke<ReplayResult>("ssh/terminal/replay", { sessionId: session.value.sessionId, afterSequence: lastSequence })
+    void workbenchApi.invoke<ReplayResult>("ssh/terminal/replay", { sessionId: session.value.sessionId, afterSequence: lastSequence })
       .then((result) => {
         if (!result.complete) {
           // 环形缓冲（2 MiB）已淘汰洞前缀：活会话不能误判成已退出——sz/ZMODEM
@@ -4171,7 +4181,7 @@ const terminalTransportWatch = useTerminalTransportWatch({
   terminalError,
   session,
   resetInputQueue: () => terminalInputQueue.reset(),
-  probeTransport: (sessionId) => window.dbxPlugin.invoke<ReplayResult>(
+  probeTransport: (sessionId) => workbenchApi.invoke<ReplayResult>(
     "ssh/terminal/replay",
     { sessionId, afterSequence: lastSequence },
     { timeoutMs: TERMINAL_TRANSPORT_PROBE_TIMEOUT_MS },
@@ -4214,7 +4224,7 @@ async function resolveStoredConnectionProtocol(connectionId: string, bootRestore
   const delayMs = 250;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const result = await window.dbxPlugin.invoke<{ protocol?: string; shell?: string; cwd?: string; env?: Array<{ name?: unknown; value?: unknown }> }>("connection/protocol", { connectionId });
+      const result = await workbenchApi.invoke<{ protocol?: string; shell?: string; cwd?: string; env?: Array<{ name?: unknown; value?: unknown }> }>("connection/protocol", { connectionId });
       const protocol = typeof result?.protocol === "string" ? result.protocol : "";
       if (protocol) {
         return {
@@ -4366,7 +4376,7 @@ async function openSession(forceNew = false, bootRestore = false, isRetry = fals
     lastSequence = 0;
     pendingTerminalFrames.clear();
     replayNoProgress = 0;
-    const info = await window.dbxPlugin.invoke<SessionInfo>("ssh/session/open", {
+    const info = await workbenchApi.invoke<SessionInfo>("ssh/session/open", {
       connectionId: connectionId.value,
       workbenchId: workbenchId.value,
       requestedSessionId,
@@ -4381,7 +4391,7 @@ async function openSession(forceNew = false, bootRestore = false, isRetry = fals
     // 未注册的在途会话，成功返回即成孤儿并永久滞留批量目标注册表
     // （issue #217）。拆除中的 webview 日志不可见，静默关闭即可。
     if (connectCancelled.value || disposed) {
-      void window.dbxPlugin.invoke("ssh/session/close", { sessionId: info.sessionId }).catch(() => undefined);
+      void workbenchApi.invoke("ssh/session/close", { sessionId: info.sessionId }).catch(() => undefined);
       if (!disposed) connectLog.push("warn", t("connectCard.log.orphanClosed"));
       return;
     }
@@ -4404,7 +4414,7 @@ async function openSession(forceNew = false, bootRestore = false, isRetry = fals
     hostReopenFailed = false;
     inactiveWaiting.value = false;
     connectLog.push("info", t("connectCard.log.connected", { seconds: ((Date.now() - attemptStarted) / 1000).toFixed(1) }));
-    const replay = await window.dbxPlugin.invoke<ReplayResult>("ssh/terminal/replay", {
+    const replay = await workbenchApi.invoke<ReplayResult>("ssh/terminal/replay", {
       sessionId: info.sessionId,
       afterSequence: requestedMatches ? lastSequence : 0,
     });
@@ -4495,7 +4505,7 @@ async function attachSession(sessionId: string, retryReference: string = initial
   connectSucceeded.value = false;
   activeTerminalSessionId = sessionId;
   try {
-    const info = await window.dbxPlugin.invoke<SessionInfo>("ssh/session/attach", {
+    const info = await workbenchApi.invoke<SessionInfo>("ssh/session/attach", {
       connectionId: connectionId.value,
       workbenchId: workbenchId.value,
       afterSequence: lastSequence,
@@ -4567,14 +4577,14 @@ async function autoStartTunnelProfiles() {
   const profiles = loadTunnelProfiles(cid);
   if (!profiles.length) return;
   try {
-    const payload = await window.dbxPlugin.invoke<unknown>("ssh/forward/list", { connectionId: cid });
+    const payload = await workbenchApi.invoke<unknown>("ssh/forward/list", { connectionId: cid });
     const running = parseForwards(payload);
     let started = 0;
     let firstFailure = "";
     for (const profile of profiles) {
       if (matchingRunningForward(profile, running) || findForwardConflict(running, profile)) continue;
       try {
-        await window.dbxPlugin.invoke("ssh/forward/start", forwardStartParams(profile, sid, false));
+        await workbenchApi.invoke("ssh/forward/start", forwardStartParams(profile, sid, false));
         started += 1;
       } catch (cause) {
         firstFailure ||= cause instanceof Error ? cause.message : String(cause);
@@ -4657,11 +4667,11 @@ async function closeSession(updateStatus = true) {
   // 外部编辑器监听挂在会话上：断开前先停掉（后端 ssh/session/close 兜底）。
   // M15 多文件：清空整个 watch 注册表与逐文件确认队列。
   if (sessionId) {
-    void window.dbxPlugin.invoke("watch/stop-all", { sessionId }).catch(() => undefined);
+    void workbenchApi.invoke("watch/stop-all", { sessionId }).catch(() => undefined);
     activeExternalWatches.value = {};
     watchModifiedQueue.value = [];
   }
-  if (sessionId) await window.dbxPlugin.invoke("ssh/session/close", { sessionId }).catch(() => undefined);
+  if (sessionId) await workbenchApi.invoke("ssh/session/close", { sessionId }).catch(() => undefined);
   if (updateStatus) {
     terminalState.value = "disconnected";
     terminalError.value = t("disconnected");
@@ -4686,7 +4696,7 @@ async function startLocalTerminal(
   if (sftpPaneOpen.value) sftpPaneOpen.value = false;
   if (batchBarOpen.value) batchBarOpen.value = false;
   try {
-    const info = await window.dbxPlugin.invoke<{ sessionId: string; shell: string }>("local/terminal/start", {
+    const info = await workbenchApi.invoke<{ sessionId: string; shell: string }>("local/terminal/start", {
       workbenchId: workbenchId.value,
       // spawn 尺寸必须等于面板稳定后的尺寸（单靠 fitTerminalDimensions 不够——
       // dock「+」新 tab 此时可能还没布局完，fit 回落 80×24，稍后的真实 fit 是
@@ -4719,7 +4729,7 @@ async function startLocalTerminal(
       // 与同文件其他交互调用一致地给超时，失败落入 catch 走 showError。
     }, { timeoutMs: 10_000 });
     if (disposed) {
-      void window.dbxPlugin.invoke("local/session/close", { sessionId: info.sessionId }, { timeoutMs: 10_000 }).catch(() => undefined);
+      void workbenchApi.invoke("local/session/close", { sessionId: info.sessionId }, { timeoutMs: 10_000 }).catch(() => undefined);
       return;
     }
     localSession.value = { sessionId: info.sessionId, shell: info.shell };
@@ -4750,7 +4760,7 @@ async function closeLocalTerminal() {
   sessionMenuShellOpen.value = false;
   sessionMenuShellPickOpen.value = false;
   if (!sessionId) return;
-  await window.dbxPlugin.invoke("local/session/close", { sessionId }, { timeoutMs: 10_000 }).catch(() => undefined);
+  await workbenchApi.invoke("local/session/close", { sessionId }, { timeoutMs: 10_000 }).catch(() => undefined);
   terminal?.focus();
 }
 
@@ -4773,7 +4783,7 @@ async function startTelnetSession(options: TelnetConnectOptions): Promise<boolea
         }
       : undefined;
   try {
-    const info = await window.dbxPlugin.invoke<{ sessionId: string; host: string; port: number }>("telnet/start", {
+    const info = await workbenchApi.invoke<{ sessionId: string; host: string; port: number }>("telnet/start", {
       connectionId: connectionId.value || undefined,
       workbenchId: workbenchId.value,
       host: options.host,
@@ -4786,7 +4796,7 @@ async function startTelnetSession(options: TelnetConnectOptions): Promise<boolea
       ...(autoLogin ? { autoLogin } : {}),
     });
     if (disposed) {
-      void window.dbxPlugin.invoke("telnet/close", { sessionId: info.sessionId }).catch(() => undefined);
+      void workbenchApi.invoke("telnet/close", { sessionId: info.sessionId }).catch(() => undefined);
       return false;
     }
     telnetSession.value = { sessionId: info.sessionId, host: info.host, port: info.port };
@@ -4812,7 +4822,7 @@ async function closeTelnetSession() {
   telnetError.value = "";
   telnetPendingFrames.clear();
   if (!sessionId) return;
-  await window.dbxPlugin.invoke("telnet/close", { sessionId }).catch(() => undefined);
+  await workbenchApi.invoke("telnet/close", { sessionId }).catch(() => undefined);
   terminal?.focus();
 }
 
@@ -4829,7 +4839,7 @@ async function startVncSession(options: VncConnectOptions): Promise<boolean> {
   // 同一终端视图互斥：残留的 closed 会话先清场再开新连接。
   if (vncSession.value && vncState.value !== "closed") await closeVncSession();
   try {
-    const info = await window.dbxPlugin.invoke<{ sessionId: string; host: string; port: number }>("vnc/start", {
+    const info = await workbenchApi.invoke<{ sessionId: string; host: string; port: number }>("vnc/start", {
       connectionId: connectionId.value || undefined,
       workbenchId: workbenchId.value,
       host: options.host,
@@ -4840,7 +4850,7 @@ async function startVncSession(options: VncConnectOptions): Promise<boolean> {
       ...(options.password ? { password: options.password } : {}),
     });
     if (disposed) {
-      void window.dbxPlugin.invoke("vnc/close", { sessionId: info.sessionId }).catch(() => undefined);
+      void workbenchApi.invoke("vnc/close", { sessionId: info.sessionId }).catch(() => undefined);
       return false;
     }
     vncSession.value = { sessionId: info.sessionId, host: info.host, port: info.port };
@@ -4932,20 +4942,20 @@ async function closeVncSession() {
   vncState.value = "idle";
   vncError.value = "";
   if (!sessionId) return;
-  await window.dbxPlugin.invoke("vnc/close", { sessionId }).catch(() => undefined);
+  await workbenchApi.invoke("vnc/close", { sessionId }).catch(() => undefined);
   terminal?.focus();
 }
 
 function sendVncInput(event: VncInputEvent) {
   const sessionId = vncSession.value?.sessionId;
   if (!sessionId) return;
-  void window.dbxPlugin.invoke("vnc/input", { sessionId, ...event }).catch(() => undefined);
+  void workbenchApi.invoke("vnc/input", { sessionId, ...event }).catch(() => undefined);
 }
 
 function sendVncClipboard(text: string) {
   const sessionId = vncSession.value?.sessionId;
   if (!sessionId || !text) return;
-  void window.dbxPlugin.invoke("vnc/set-clipboard", { sessionId, text }).catch(() => undefined);
+  void workbenchApi.invoke("vnc/set-clipboard", { sessionId, text }).catch(() => undefined);
   showNotice(t("vnc.clipboardSent"));
 }
 
@@ -4973,7 +4983,7 @@ async function startSerialSession(options: SerialConnectOptions) {
     // 线上字段为 snake_case：SerialStartRequest 未启用 camelCase rename；
     // 响应则由 sidecar 手拼 json!，sessionId/port/baudRate 为 camelCase，
     // binaryInput 为 B1 能力字段（旧 sidecar 缺失 → JSON 兼容路径）。
-    const info = await window.dbxPlugin.invoke<{ sessionId: string; port: string; baudRate: number; binaryInput?: boolean }>("serial/start", {
+    const info = await workbenchApi.invoke<{ sessionId: string; port: string; baudRate: number; binaryInput?: boolean }>("serial/start", {
       workbenchId: workbenchId.value,
       port_name: options.portName,
       baud_rate: options.baudRate,
@@ -4983,7 +4993,7 @@ async function startSerialSession(options: SerialConnectOptions) {
       backspace_mode: options.backspaceMode,
     });
     if (disposed) {
-      void window.dbxPlugin.invoke("serial/close", { sessionId: info.sessionId }).catch(() => undefined);
+      void workbenchApi.invoke("serial/close", { sessionId: info.sessionId }).catch(() => undefined);
       return;
     }
     serialSession.value = { sessionId: info.sessionId, port: info.port, baudRate: info.baudRate };
@@ -5018,11 +5028,11 @@ async function closeSerialSession() {
   // 上传挂在会话上：随会话关闭一并终止（sidecar cancel 幂等）。
   if (serialUpload.value.phase !== "idle") {
     serialUploadAbortRequested = true;
-    if (sessionId) void window.dbxPlugin.invoke("serial/upload/cancel", { sessionId }).catch(() => undefined);
+    if (sessionId) void workbenchApi.invoke("serial/upload/cancel", { sessionId }).catch(() => undefined);
     serialUpload.value = initialSerialUploadState();
   }
   if (!sessionId) return;
-  await window.dbxPlugin.invoke("serial/close", { sessionId }).catch(() => undefined);
+  await workbenchApi.invoke("serial/close", { sessionId }).catch(() => undefined);
   terminal?.focus();
 }
 
@@ -5046,7 +5056,7 @@ async function startSerialUpload(request: { file: File; protocol: SerialUploadPr
       sessionId,
       protocol: request.protocol,
       fileName: request.file.name,
-      bridge: window.dbxPlugin,
+      bridge: workbenchApi,
       readChunk: async (start, end) => new Uint8Array(await request.file.slice(start, end).arrayBuffer()),
       shouldAbort: () => serialUploadAbortRequested,
     });
@@ -5066,7 +5076,7 @@ function cancelSerialUpload() {
   if (!serialUploadBusy.value) return;
   const sessionId = serialSession.value?.sessionId;
   serialUploadAbortRequested = true;
-  if (sessionId) void window.dbxPlugin.invoke("serial/upload/cancel", { sessionId }).catch(() => undefined);
+  if (sessionId) void workbenchApi.invoke("serial/upload/cancel", { sessionId }).catch(() => undefined);
   serialUpload.value = { ...serialUpload.value, phase: "failed", reason: "cancelled" };
 }
 
@@ -5074,8 +5084,8 @@ function cancelSerialUpload() {
 // 前先通知本 workbench 释放自己的 sidecar scope（PTY 会话），避免孤儿 PTY 活到 sidecar
 // 退出。特 性探测：旧宿主不发 workbench/close，也无此 API。置 disposed 拦住在途的
 // 异步启动流程（startLocalTerminal 会据此回收刚开的会话）。
-if (window.dbxPlugin.workbench?.onClose) {
-  window.dbxPlugin.workbench.onClose(async () => {
+if (workbenchApi.workbench?.onClose) {
+  workbenchApi.workbench.onClose(async () => {
     disposed = true;
     // 只枚举本工作台自有会话（workbenchCloseTargets 契约）：同连接其他 tab、
     // 底部 dock 终端等兄弟工作台的会话不在列表里，关闭本 tab 绝不波及它们。
@@ -5088,7 +5098,7 @@ if (window.dbxPlugin.workbench?.onClose) {
       ["vnc/close", vncSession.value?.sessionId],
       ["rdp/close", rdpSession.value?.sessionId],
     ]);
-    await Promise.allSettled(ownedSessions.map(([method, sessionId]) => window.dbxPlugin.notify(method, { sessionId })));
+    await Promise.allSettled(ownedSessions.map(([method, sessionId]) => workbenchApi.notify(method, { sessionId })));
     localSession.value = null;
     session.value = undefined;
     telnetSession.value = null;
@@ -5212,7 +5222,7 @@ async function loadLocalShells() {
   if (localShellsLoading.value || localShells.value.length) return;
   localShellsLoading.value = true;
   try {
-    const result = await window.dbxPlugin.invoke<{ shells: typeof localShells.value }>("local/shells/list", {}, { timeoutMs: 10_000 });
+    const result = await workbenchApi.invoke<{ shells: typeof localShells.value }>("local/shells/list", {}, { timeoutMs: 10_000 });
     localShells.value = result.shells || [];
   } catch {
     // 旧 sidecar 无发现方法：菜单退化为仅注入开关（start 仍走自动探测）。
@@ -5235,7 +5245,7 @@ async function openLocalShellSurfaceMenu() {
   localShellSurfaceOpen.value = true;
   await loadLocalShells();
   try {
-    const listed = await window.dbxPlugin.request<{ connections?: typeof dockConnections.value }>("host.listConnections");
+    const listed = await workbenchApi.request<{ connections?: typeof dockConnections.value }>("host.listConnections");
     dockConnections.value = listed?.connections ?? [];
   } catch {
     // Legacy hosts without the listConnections extension point: the connection section stays hidden.
@@ -5244,7 +5254,7 @@ async function openLocalShellSurfaceMenu() {
 }
 function openConnectionSurface(connection: (typeof dockConnections.value)[number]) {
   localShellSurfaceOpen.value = false;
-  void window.dbxPlugin.openWorkbench?.(
+  void workbenchApi.openWorkbench?.(
     "io.dbx.ssh.workbench",
     {
       connectionId: connection.id,
@@ -5257,7 +5267,7 @@ function openConnectionSurface(connection: (typeof dockConnections.value)[number
 }
 function openLocalShellSurface(program?: string) {
   localShellSurfaceOpen.value = false;
-  void window.dbxPlugin.openWorkbench?.(
+  void workbenchApi.openWorkbench?.(
     "io.dbx.ssh.workbench",
     { plugin: { mode: "local-terminal", ...(program ? { shell: program } : {}) } },
     { forceNew: true },
@@ -5267,7 +5277,7 @@ function openLocalShellSurface(program?: string) {
 async function setLocalShellPref(program: string) {
   localShellPref.value = program;
   try {
-    await window.dbxPlugin.invoke("local/preferences/set", { localShell: program });
+    await workbenchApi.invoke("local/preferences/set", { localShell: program });
   } catch {
     // 旧 sidecar：会话内存态兜底。
   }
@@ -5276,7 +5286,7 @@ async function setLocalShellPref(program: string) {
 async function setLocalShellIntegrationPref(enabled: boolean) {
   localShellIntegrationPref.value = enabled;
   try {
-    await window.dbxPlugin.invoke("local/preferences/set", { localShellIntegration: enabled });
+    await workbenchApi.invoke("local/preferences/set", { localShellIntegration: enabled });
   } catch {
     // 旧 sidecar：会话内存态兜底。
   }
@@ -5286,7 +5296,7 @@ async function setLocalShellIntegrationPref(enabled: boolean) {
 async function setLocalShellCwd(dir: string) {
   localShellCwdPref.value = dir.trim();
   try {
-    await window.dbxPlugin.invoke("local/preferences/set", { localShellCwd: localShellCwdPref.value });
+    await workbenchApi.invoke("local/preferences/set", { localShellCwd: localShellCwdPref.value });
   } catch {
     // 旧 sidecar：会话内存态兜底。
   }
@@ -5296,7 +5306,7 @@ async function setLocalShellCwd(dir: string) {
 // 名字重复时后者覆盖前者（与 start 载荷的 map 语义一致）。
 async function setLocalShellEnv() {
   try {
-    await window.dbxPlugin.invoke("local/preferences/set", { localShellEnv: localShellEnvClean.value });
+    await workbenchApi.invoke("local/preferences/set", { localShellEnv: localShellEnvClean.value });
   } catch {
     // 旧 sidecar：会话内存态兜底。
   }
@@ -5315,10 +5325,10 @@ function removeLocalShellEnvRow(index: number) {
 // A4 target contract (spec §4/§11): the plugin payload lives only in context.plugin and the instance identity
 // (workbenchId) is generated by the host — when a legacy host omits it, the workbenchId fallback covers it.
 // The menu item is hidden on hosts without this bridge.
-const canOpenLocalTab = computed(() => Boolean(window.dbxPlugin?.openWorkbench));
+const canOpenLocalTab = computed(() => Boolean(workbenchApi?.openWorkbench));
 
 async function openLocalTerminalTab() {
-  const api = window.dbxPlugin;
+  const api = workbenchApi;
   if (!api.openWorkbench) return;
   await api.openWorkbench(
     "io.dbx.ssh.workbench",
@@ -5330,7 +5340,7 @@ async function openLocalTerminalTab() {
 // webview 重建后接回 sidecar 里仍活着的本地 shell（workbench/close 才回收）。
 async function reattachLocalSession(): Promise<boolean> {
   try {
-    const result = await window.dbxPlugin.invoke<{ sessions?: Array<{ sessionId: string; workbenchId: string; shell: string }> }>(
+    const result = await workbenchApi.invoke<{ sessions?: Array<{ sessionId: string; workbenchId: string; shell: string }> }>(
       "local/session/list",
       {},
       { timeoutMs: 10_000 },
@@ -5362,7 +5372,7 @@ async function reattachLocalSession(): Promise<boolean> {
 let hostReopenFailed = false;
 async function requestHostReopenConnection(): Promise<boolean> {
   if (!connectionId.value) return false;
-  const restored = await reopenHostConnection(window.dbxPlugin, connectionId.value);
+  const restored = await reopenHostConnection(workbenchApi, connectionId.value);
   hostReopenFailed = !restored;
   return restored;
 }
@@ -5396,7 +5406,7 @@ function sessionTabContext(reuseAuthenticatedTransport: boolean, spawnCommand?: 
 }
 
 function openNewSessionTab() {
-  const api = window.dbxPlugin;
+  const api = workbenchApi;
   if (!api.openWorkbench || !connectionId.value) return;
   // target: "tab"：面板表面（dock iframe）调用时显式指定主工作台 tab 落点；
   // tab 表面调用本就落 tab，旧宿主忽略该选项回落面板条目（可选降级）。
@@ -5407,7 +5417,7 @@ function openNewSessionTab() {
 // 已认证 SSH transport 上另开 channel，因此堡垒机不会再次发起 MFA。这里不
 // 复制或缓存 OTP；若原 transport 已失效，后端会要求走“新建会话”重新连接。
 function openCopiedSessionTab() {
-  const api = window.dbxPlugin;
+  const api = workbenchApi;
   if (!api.openWorkbench || !connectionId.value || !connected.value) return;
   void api.openWorkbench("io.dbx.ssh.workbench", sessionTabContext(true), { forceNew: true, target: "tab" });
 }
@@ -5420,14 +5430,14 @@ const spawnSessionDialogOpen = ref(false);
 const spawnSessionCommand = ref("");
 
 function openCommandSessionTab() {
-  if (!window.dbxPlugin?.openWorkbench || !connectionId.value || !connected.value) return;
+  if (!workbenchApi?.openWorkbench || !connectionId.value || !connected.value) return;
   spawnSessionCommand.value = "";
   spawnSessionDialogOpen.value = true;
 }
 
 function confirmCommandSessionTab() {
   const command = spawnSessionCommand.value.trim();
-  const api = window.dbxPlugin;
+  const api = workbenchApi;
   if (!api?.openWorkbench || !connectionId.value || !connected.value || !command) return;
   spawnSessionDialogOpen.value = false;
   void api.openWorkbench("io.dbx.ssh.workbench", sessionTabContext(true, command), { forceNew: true, target: "tab" });
@@ -5457,7 +5467,7 @@ async function resolveHostKey(accept: boolean) {
   if (!prompt) return;
   hostKeyPrompt.value = undefined;
   try {
-    await window.dbxPlugin.invoke("connection/challenge/resolve", {
+    await workbenchApi.invoke("connection/challenge/resolve", {
       challengeId: prompt.challengeId,
       operationId: prompt.operationId,
       accept,
@@ -5703,7 +5713,7 @@ watch([compiledHighlightRules, highlightDisplayMode], () => {
 
 async function persistTerminalFeaturePrefs(patch: Record<string, unknown>) {
   try {
-    await window.dbxPlugin.invoke("local/preferences/set", patch);
+    await workbenchApi.invoke("local/preferences/set", patch);
   } catch {
     // 旧 sidecar 无这些键位：与 localShell 等同款，当前会话内存态兜底。
   }
@@ -5778,6 +5788,7 @@ function handleActionLinkActivate(match: ActionLinkMatch, event: MouseEvent) {
 // 通道（replaceTerminalLineWith）：命令落在 shell 输入行原地，用户确认后自行回车。
 // 无终端会话时 toast 提示先连接，不静默丢弃。
 function handleDockerOpenInTerminal(event: Event) {
+  if (!workbenchActive()) return;
   const command = (event as CustomEvent<{ command?: string }>).detail?.command ?? "";
   if (!command) return;
   const hasTerminalSession = Boolean(
@@ -6157,7 +6168,7 @@ async function archiveSidePath(path: string) {
   archiveBusy.value = true;
   const archiveName = `${remoteBasename(path) || "root"}.tar.gz`;
   try {
-    await window.dbxPlugin.invoke("sftp/archive", {
+    await workbenchApi.invoke("sftp/archive", {
       sessionId,
       sourcePaths: [path],
       archivePath: joinRemote(parentPath(path), archiveName),
@@ -6461,7 +6472,7 @@ function cachePrefs() {
 async function syncPrefs() {
   cachePrefs();
   try {
-    await window.dbxPlugin.invoke("local/preferences/set", {
+    await workbenchApi.invoke("local/preferences/set", {
       downloadDir: downloadDirState.value,
       downloadUseDefaultDir: downloadUseDefaultState.value,
       downloadConflictPolicy: downloadConflictState.value,
@@ -6527,7 +6538,7 @@ async function hydratePrefsOnce() {
     // 同上：等待 sidecar 权威值。
   }
   try {
-    const prefs = await window.dbxPlugin.invoke<{
+    const prefs = await workbenchApi.invoke<{
       downloadDir?: unknown;
       downloadUseDefaultDir?: unknown;
       downloadConflictPolicy?: unknown;
@@ -6725,7 +6736,7 @@ async function resolveDownloadConflictFor(dir: string, fileName: string): Promis
   const targetDir = dir || loadDownloadDir() || localDownloadDir.value;
   if (!targetDir) return "rename";
   try {
-    const probe = await window.dbxPlugin.invoke<{ exists: boolean; path: string }>("local/fs/exists", { dir: targetDir, name: fileName });
+    const probe = await workbenchApi.invoke<{ exists: boolean; path: string }>("local/fs/exists", { dir: targetDir, name: fileName });
     if (!probe.exists) return "rename";
     return await askDownloadConflict(fileName, probe.path);
   } catch {
@@ -7097,7 +7108,7 @@ async function createNewFile() {
   if (!sessionId || !name || newFileSubmitting.value) return;
   newFileSubmitting.value = true;
   try {
-    await window.dbxPlugin.invoke(sudoMode.value ? "sudo/touch" : "sftp/touch", {
+    await workbenchApi.invoke(sudoMode.value ? "sudo/touch" : "sftp/touch", {
       sessionId,
       path: joinRemote(currentPath.value, name),
     });
@@ -7120,7 +7131,7 @@ async function openAttributes(entry: SftpEntry) {
   attrsMode.value = entry.permissions || "";
   attrsLoading.value = true;
   try {
-    attrsInfo.value = await window.dbxPlugin.invoke<SftpStatInfo>(sudoMode.value ? "sudo/stat" : "sftp/stat", {
+    attrsInfo.value = await workbenchApi.invoke<SftpStatInfo>(sudoMode.value ? "sudo/stat" : "sftp/stat", {
       sessionId,
       path: pathFromUri(entry.uri),
     });
@@ -7144,7 +7155,7 @@ async function saveAttributesPermissions() {
   if (!sessionId || !entry || !mode || attrsSubmitting.value) return;
   attrsSubmitting.value = true;
   try {
-    await window.dbxPlugin.invoke(sudoMode.value ? "sudo/chmod" : "sftp/chmod", {
+    await workbenchApi.invoke(sudoMode.value ? "sudo/chmod" : "sftp/chmod", {
       sessionId,
       path: pathFromUri(entry.uri),
       mode,
@@ -7333,7 +7344,7 @@ const {
 // 缺失/拒绝时由 clipboardBridge 逐级降级（见 lib/clipboardBridge.ts）。
 function clipboardDeps(): ClipboardDeps {
   return {
-    bridge: window.dbxPlugin.clipboard ?? null,
+    bridge: workbenchApi.clipboard ?? null,
     nativeClipboard: typeof navigator !== "undefined" ? (navigator as Navigator & { clipboard?: ClipboardDeps["nativeClipboard"] }).clipboard ?? null : null,
   };
 }
@@ -7428,7 +7439,7 @@ const wallpaperSessionOnly = ref(false);
 const wallpaperActive = computed(() => wallpaperEnabled.value && !!wallpaperDataUrl.value);
 async function loadWallpaperImage() {
   try {
-    const result = await window.dbxPlugin.invoke<{ dataUrl?: string }>("local/wallpaper/get", {});
+    const result = await workbenchApi.invoke<{ dataUrl?: string }>("local/wallpaper/get", {});
     if (typeof result.dataUrl === "string") wallpaperDataUrl.value = result.dataUrl;
   } catch {
     // 旧 sidecar：背景图缺席，保持内存态。
@@ -7436,7 +7447,7 @@ async function loadWallpaperImage() {
 }
 async function setWallpaperImage(image: { base64: string; mime: string }) {
   try {
-    const result = await window.dbxPlugin.invoke<{ dataUrl?: string }>("local/wallpaper/set", { imageBase64: image.base64 });
+    const result = await workbenchApi.invoke<{ dataUrl?: string }>("local/wallpaper/set", { imageBase64: image.base64 });
     if (typeof result.dataUrl === "string") wallpaperDataUrl.value = result.dataUrl;
     wallpaperSessionOnly.value = false;
   } catch {
@@ -7449,7 +7460,7 @@ async function clearWallpaperImage() {
   wallpaperSessionOnly.value = false;
   wallpaperDataUrl.value = "";
   try {
-    await window.dbxPlugin.invoke("local/wallpaper/clear", {});
+    await workbenchApi.invoke("local/wallpaper/clear", {});
   } catch {
     // 同 set：会话内存态已清，落盘态留待桌面形态下次清除。
   }
@@ -7622,7 +7633,7 @@ async function loadRemoteShellHistory(sessionId: string) {
   remoteHistoryLoadedSessions.add(sessionId);
   try {
     const command = `for f in "$HISTFILE" ~/.bash_history ~/.zsh_history ~/.zhistory; do [ -f "$f" ] && { tail -n ${REMOTE_HISTORY_FETCH_LIMIT} "$f"; break; }; done`;
-    const result = await window.dbxPlugin.invoke<{ success: boolean; output?: string; exitCode?: number }>("ssh/exec", {
+    const result = await workbenchApi.invoke<{ success: boolean; output?: string; exitCode?: number }>("ssh/exec", {
       sessionId,
       execId: randomUUID(),
       command,
@@ -7882,7 +7893,7 @@ const { handlePluginEvent } = usePluginEvents({
 function handleEvent(event: DbxPluginEvent) {
   if ('method' in event && event.method === 'dsh/events-reset') {
     const replay = (method: string, sessionId: string | undefined, afterSequence?: number) => {
-      if (sessionId) void window.dbxPlugin.invoke(method, { sessionId, ...(afterSequence === undefined ? {} : { afterSequence }) }).catch((cause) => showError(cause, 'terminal'));
+      if (sessionId) void workbenchApi.invoke(method, { sessionId, ...(afterSequence === undefined ? {} : { afterSequence }) }).catch((cause) => showError(cause, 'terminal'));
     };
     replay('ssh/terminal/replay', session.value?.sessionId, lastSequence);
     replay('local/terminal/replay', localSession.value?.sessionId, localLastSequence.value);
@@ -7938,7 +7949,7 @@ const localTerminalActive = computed(() => isLocalMode.value || localShellRestor
 
 async function refreshPanelMetrics() {
   if (localTerminalActive.value) {
-    const sample = await window.dbxPlugin
+    const sample = await workbenchApi
       .invoke<ServerMetrics>("local/metrics", {}, { timeoutMs: 30_000 })
       .catch(() => undefined);
     if (sample) {
@@ -8001,7 +8012,7 @@ const panelNetRates = computed<{ rx: number; tx: number } | null>(() => {
 async function refreshDiskUsage() {
   if (!session.value) return;
   const path = currentPath.value;
-  const usage = await window.dbxPlugin
+  const usage = await workbenchApi
     .invoke<DiskUsage>("sftp/diskUsage", { sessionId: session.value.sessionId, path }, { timeoutMs: 30_000 })
     .catch(() => undefined);
   // fire-and-forget 无 epoch 守卫：慢响应/失败落回时目录可能已切换，
@@ -8067,13 +8078,13 @@ async function confirmChmod() {
   chmodSubmitting.value = true;
   try {
     if (sudoMode.value) {
-      await window.dbxPlugin.invoke("sudo/chmod", {
+      await workbenchApi.invoke("sudo/chmod", {
         sessionId: session.value.sessionId,
         path: pathFromUri(entry.uri),
         mode,
       });
     } else {
-      await window.dbxPlugin.invoke("sftp/chmod", {
+      await workbenchApi.invoke("sftp/chmod", {
         sessionId: session.value.sessionId,
         path: pathFromUri(entry.uri),
         mode,
@@ -8199,6 +8210,7 @@ function closeMenus() {
  *  dialog-content 同样排除：模态弹窗（如 Docker 面板的日志抽屉/kill 确认）
  *  portal 在工具条 popover 之外，点弹窗内部不该把背后的工具条弹层连带收掉。 */
 function onDocumentClickCloseMenus(event: MouseEvent) {
+  if (!workbenchActive()) return;
   if ((event.target as HTMLElement | null)?.closest?.('[data-slot="context-menu-content"], [data-slot="popover-content"], [data-slot="dialog-content"]')) return;
   closeMenus();
 }
@@ -8229,22 +8241,25 @@ let lastStableFocus: HTMLElement | null = null;
 // click；决策逻辑走 ghostClickGuard 纯模块（有单测），真实鼠标点击放行。
 const ghostClickGuard = createGhostClickGuard();
 function onDocumentMouseDownCapture(event: MouseEvent) {
-  if (!document.getElementById('dsh-ssh-root')?.contains(event.target as Node)
-    || !document.querySelector('.workbench')?.getClientRects().length) return;
+  if (!workbenchActive()) return;
+  if (!workbenchRoot()?.contains(event.target as Node)
+    || !workbenchRoot()!.querySelector('.workbench')?.getClientRects().length) return;
   ghostClickGuard.noteMouseDown();
   // 批量目标/高亮规则两个 popover 的点空白收起已移交 reka DismissableLayer
   // （pointerdown-outside → update:open(false)），capture 手动清扫移除。
 }
 function onDocumentClickCapture(event: MouseEvent) {
-  if (!document.getElementById('dsh-ssh-root')?.contains(event.target as Node)
-    || !document.querySelector('.workbench')?.getClientRects().length) return;
+  if (!workbenchActive()) return;
+  if (!workbenchRoot()?.contains(event.target as Node)
+    || !workbenchRoot()!.querySelector('.workbench')?.getClientRects().length) return;
   if (!ghostClickGuard.shouldSuppress()) return;
   event.preventDefault();
   event.stopPropagation();
 }
 function trackStableFocus(event: FocusEvent) {
-  if (!document.getElementById('dsh-ssh-root')?.contains(event.target as Node)
-    || !document.querySelector('.workbench')?.getClientRects().length) return;
+  if (!workbenchActive()) return;
+  if (!workbenchRoot()?.contains(event.target as Node)
+    || !workbenchRoot()!.querySelector('.workbench')?.getClientRects().length) return;
   const target = event.target;
   if (!(target instanceof HTMLElement)) return;
   if (target.closest('[data-slot="dialog-content"]') || target.closest('[data-slot="context-menu-content"]')) return;
@@ -8299,14 +8314,16 @@ const modalOpenCount = computed(() => modalOpenStates.value.filter(Boolean).leng
 /** 当前最顶层弹层容器；无弹层时返回 null（嵌套时取首个命中即最外层——焦点回落语义）。 */
 function topModalContainer(): HTMLElement | null {
   if (!modalOpenCount.value) return null;
-  return document.querySelector<HTMLElement>('[data-slot="dialog-content"]');
+  return workbenchRoot()!.querySelector<HTMLElement>('[data-slot="dialog-content"]');
 }
 
 function focusTopModal() {
+  if (!workbenchActive()) return;
   pickModalFocusTarget(topModalContainer())?.focus({ preventScroll: true });
 }
 
 watch(modalOpenCount, (count, previous) => {
+  if (!workbenchActive()) return;
   if (count > previous) {
     // 打开：整组从无到有时记录触发元素供关闭归还；嵌套打开（如命令
     // 对话框上叠粘贴确认）逐层入栈。触发元素优先取"弹层外稳定焦点"，
@@ -8342,8 +8359,9 @@ watch(modalOpenCount, (count, previous) => {
  * 逐层 if-return：无内容打开时按键穿透，不影响终端内 vim 等自身 Esc 语义。
  */
 function onDocumentKeydown(event: KeyboardEvent) {
-  if (!document.getElementById('dsh-ssh-root')?.contains(event.target as Node)
-    || !document.querySelector('.workbench')?.getClientRects().length) return;
+  if (!workbenchActive()) return;
+  if (!workbenchRoot()?.contains(event.target as Node)
+    || !workbenchRoot()!.querySelector('.workbench')?.getClientRects().length) return;
   // Tab 焦点陷阱已移交 reka Dialog 的 FocusScope（每个弹层独立圈定，嵌套时顶层
   // 生效）；此处不再拦截 Tab。注意 FocusScope 的 keydown 挂在内容元素上，冒泡先于
   // 本 document 处理器，若恢复自制陷阱会与 reka 双步进，勿回退。
@@ -8351,7 +8369,7 @@ function onDocumentKeydown(event: KeyboardEvent) {
   if (event.key !== "Escape") return;
   // reka Select/ContextMenu/Popover 弹层打开时 Esc 由 reka 消费（关弹层），不落入下方
   // 弹窗关闭链。本处理器注册早于 DismissableLayer，先跑时弹层 DOM 仍在。
-  if (document.querySelector('[data-slot="select-content"], [data-slot="context-menu-content"], [data-slot="popover-content"]')) return;
+  if (workbenchRoot()!.querySelector('[data-slot="select-content"], [data-slot="context-menu-content"], [data-slot="popover-content"]')) return;
   // 录制倒计时优先取消（遮罩在终端区，不属于弹层体系）。
   if (isCountdownActive(recordCountdown.value)) {
     cancelRecordCountdown();
@@ -8508,9 +8526,9 @@ function writeU64(bytes: Uint8Array, offset: number, value: number) {
 
 async function waitForHostApi(timeoutMs = 8000) {
   const deadline = Date.now() + timeoutMs;
-  while (!window.dbxPlugin && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
-  if (!window.dbxPlugin) throw new Error(t("hostApiUnavailable"));
-  return window.dbxPlugin;
+  while (!workbenchApi && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+  if (!workbenchApi) throw new Error(t("hostApiUnavailable"));
+  return workbenchApi;
 }
 
 async function initialize() {
@@ -8519,6 +8537,7 @@ async function initialize() {
     api.ready,
     api.request<Record<string, unknown>>("host.getContext"),
   ]);
+  if (disposed) return;
   transportReuseState = createSessionTransportReuseState(hostContext.value);
   locale.value = api.locale || "zh-CN";
   startConnectionNameSync(api);
@@ -8526,6 +8545,7 @@ async function initialize() {
   // 否则 workbenchUi 镜像与 setup 期的 sftp-pane-open 等键全部读到空档，
   // 布局偏好整组"不持久"（issue #178 的半个根因，另一半是宿主缺桥）。
   await pluginStore.ready.catch(() => undefined);
+  if (disposed) return;
   // 设置偏好以水合后的持久化值为准重读（issue #216 type-close 同款）：setup
   // 同步初始化时宿主异步 storage 尚未落地，直读必然落在空档，跳过这步用户
   // 设置跨会话不生效。
@@ -8641,7 +8661,7 @@ async function initialize() {
  */
 async function findReattachSession(): Promise<string> {
   try {
-    const result = await window.dbxPlugin.invoke<{ sessions?: SessionSummary[] }>("ssh/sessions/list", {}, { timeoutMs: 10_000 });
+    const result = await workbenchApi.invoke<{ sessions?: SessionSummary[] }>("ssh/sessions/list", {}, { timeoutMs: 10_000 });
     return pickLiveSessionForReattach(result?.sessions, { connectionId: connectionId.value, workbenchId: workbenchId.value });
   } catch {
     return "";
@@ -8665,7 +8685,7 @@ async function reattachProtocolSession(): Promise<boolean> {
   ];
   const candidates = await Promise.all(lists.map(async ({ kind, method }) => {
     try {
-      const result = await window.dbxPlugin.invoke<{ sessions?: ProtocolSessionSummary[] }>(method, {}, { timeoutMs: 10_000 });
+      const result = await workbenchApi.invoke<{ sessions?: ProtocolSessionSummary[] }>(method, {}, { timeoutMs: 10_000 });
       const sessionId = pickProtocolSessionForReattach(result?.sessions, workbenchId.value);
       const session = result?.sessions?.find((entry) => entry?.sessionId === sessionId);
       return session ? { kind, session } : null;
@@ -8683,15 +8703,15 @@ async function reattachProtocolSession(): Promise<boolean> {
     telnetState.value = "running";
     telnetLastSequence.value = 0;
     telnetPendingFrames.clear();
-    await window.dbxPlugin.invoke<ReplayResult>("telnet/replay", { sessionId: live.session.sessionId, afterSequence: 0 });
+    await workbenchApi.invoke<ReplayResult>("telnet/replay", { sessionId: live.session.sessionId, afterSequence: 0 });
   } else if (live.kind === "vnc") {
     vncSession.value = { sessionId: live.session.sessionId, host: live.session.host || "", port: live.session.port || 5900 };
     vncState.value = "running";
-    await window.dbxPlugin.invoke("vnc/replay", { sessionId: live.session.sessionId });
+    await workbenchApi.invoke("vnc/replay", { sessionId: live.session.sessionId });
   } else if (live.kind === "rdp") {
     rdpSession.value = { sessionId: live.session.sessionId, host: live.session.host || "", port: live.session.port || 3389 };
     rdpState.value = { state: "running", error: "", errorKind: "", attempt: 0, maxAttempts: 0 };
-    await window.dbxPlugin.invoke("rdp/replay", { sessionId: live.session.sessionId });
+    await workbenchApi.invoke("rdp/replay", { sessionId: live.session.sessionId });
   } else {
     serialSession.value = {
       sessionId: live.session.sessionId,
@@ -8702,7 +8722,7 @@ async function reattachProtocolSession(): Promise<boolean> {
     serialLastSequence.value = 0;
     serialPendingFrames.clear();
     serialBinaryInput.value = live.session.binaryInput !== false;
-    await window.dbxPlugin.invoke<ReplayResult>("serial/replay", { sessionId: live.session.sessionId, afterSequence: 0 });
+    await workbenchApi.invoke<ReplayResult>("serial/replay", { sessionId: live.session.sessionId, afterSequence: 0 });
   }
   await nextTick();
   scheduleFit();
@@ -8733,13 +8753,13 @@ watch(sftpPaneOpen, (open) => {
 async function syncMcpSettingsMirror() {
   const stored = loadMcpSettingsMirror();
   try {
-    const remote = extractMcpSettingsMirror(await window.dbxPlugin.invoke<unknown>("mcp/settings/get", {}));
+    const remote = extractMcpSettingsMirror(await workbenchApi.invoke<unknown>("mcp/settings/get", {}));
     if (stored === null) {
       persistMcpSettingsMirror(remote);
       return;
     }
     if (!mcpSettingsMirrorEquals(stored, remote)) {
-      await window.dbxPlugin.invoke("mcp/settings/set", {
+      await workbenchApi.invoke("mcp/settings/set", {
         maxReadBytes: stored.maxReadBytes,
         maxUploadBytes: stored.maxUploadBytes,
         maxDownloadBytes: stored.maxDownloadBytes,
@@ -8751,6 +8771,11 @@ async function syncMcpSettingsMirror() {
     // sidecar 不可用（旧版/降级）：跳过，下次启动重试。
   }
 }
+
+watch(() => workbenchScope?.active(), (active) => {
+  if (active === false) { closeMenus(); hideTooltip(); }
+  else if (active === true) void nextTick(() => window.dispatchEvent(new Event("resize")));
+});
 
 onMounted(() => {
   document.addEventListener("click", onDocumentClickCloseMenus);
@@ -8835,6 +8860,8 @@ onBeforeUnmount(() => {
   unsubscribeEvent?.();
   unsubscribeBinary?.();
   unsubscribeEnvironment?.();
+  unsubscribeFileDrag?.();
+  unsubscribeFileDrop?.();
   resizeObserver?.disconnect();
   osc52Disposable?.dispose();
   osc52Disposable = undefined;

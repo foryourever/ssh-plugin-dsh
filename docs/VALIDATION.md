@@ -1,6 +1,6 @@
 # 验证记录
 
-验证环境：macOS ARM64，Node.js 22.23.1，2026-11-03。插件版本 1.0.7；上游 0.7.13-beta.1，提交 `93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b`。
+验证环境：macOS ARM64，Node.js 22.23.1，2026-11-03。插件版本 1.0.8；上游 0.7.13-beta.1，提交 `93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b`。
 
 ## 已通过
 
@@ -13,10 +13,10 @@
 | Host 测试 | `npm run check`：33 项通过，覆盖真实 Cordis 激活、HTTP RPC 信封校验与取消信号、分帧、UTF-8、多请求关联、二进制、反向用户输入、畸形及超长帧、进程退出、取消、超时、重启、加密存储、篡改拒绝、工具参数和注册资源释放。 |
 | 真实 Harness 服务 | `npm run check:harness`：使用本机 Harness 0.2.0-rc.2 的真实 Connection、WebServer、ToolRuntime、SystemPrompt 和 Cordis；临时凭据存储、随机回环端口。确认插件 ACTIVE、16 个工具注册、真实 cookie 认证 HTTP 调用、未认证 401、跨源 403，以及卸载后工具和路由清理。 |
 | 真实 SSH/SFTP | 临时回环 SSH 服务端，临时 RSA 主机密钥与测试密码；真实 Rust 客户端执行命令、读取文件、写入并读取中文内容；只读连接写入被拒绝。服务端仅返回测试响应，未执行任意 shell 输入，未连接真实服务器。 |
-| 完整前端构建 | 约 24.78 MiB 的原生懒加载客户端，内置 Vue、全部工作台模块、CSS、字体/资源及 MP4v/PPTX worker；构建脚本拒绝遗漏的外部资源。React 来自宿主。 |
+| 完整前端构建 | 约 24.75 MiB 的原生懒加载客户端，内置 Vue、全部工作台模块、CSS、字体/资源及 MP4v/PPTX worker；构建脚本拒绝遗漏的外部资源。React 来自宿主。 |
 | 前端类型 | 完整 `vue-tsc --noEmit` 通过。 |
 | 安装归档 | 自定义 npm 兼容 `.tgz` 含完整原版 1912 个文件；在独立临时安装目录执行真实 npm 安装，后端可启动并返回 16 个工具。npm 将三个 `.gitignore` 改名为 `.npmignore`，校验脚本兼容该改名并核对原字节。 |
-| 前端测试 | 9 个针对性测试文件，45 项通过；包括经真实 Cordis 激活生成后的客户端工厂、注册 `main` / `sidebar.panellist` 槽位、实际挂载 Vue 服务器管理表单、终端输入队列、工作台关闭、桥接及嵌入布局提示框定位。没有 iframe。 |
+| 前端测试 | 12 个针对性测试文件，69 项通过；包括经真实 Cordis 激活生成后的客户端工厂、注册 `main` / `sidebar.panellist` 槽位、实际挂载 Vue 服务器管理表单、终端输入队列、工作台关闭、桥接及嵌入布局提示框定位。没有 iframe。 |
 
 ## 1.0.1 启动修复
 
@@ -73,6 +73,15 @@ Harness 根节点的 `contain: layout style` 为 fixed 提示框建立了包含�
 
 适配层仅移除 `ssh_list_connections`、`ssh_list_known_hosts`、`ssh_remove_known_host` 和 `ssh_multi_exec` 不适用的顶层选择条件，不修改原始源码及工具快照。修复后 33 项测试通过：实际注册的两个列表工具接受空对象，删除指纹仅需主机参数；经 Agent 包装器和真实 Rust 后端列出空列表、已保存连接，并执行回环多目标命令。缺失必填字段、无连接的单目标命令/SFTP、空目标或超过 10 个目标仍被拒绝；列表未泄露测试密码。`check:harness` 的真实宿主激活、16 个工具、HTTP 认证与卸载清理检查通过。未重载用户运行中的插件或连接会话。
 
+## 1.0.8 多会话与工作台隔离
+
+- 顶部标签支持同时连接不同服务器，也支持同一服务器打开多个独立终端；切换标签保留各自的终端缓冲区、文件面板及工作台状态。关闭标签只释放该工作台，最后一个同服务器工作台关闭时才清理连接级资源。
+- 工作台上下文、标题、关闭回调、OTP、端口映射、主题变量及弹出层目标按会话隔离；文件拖放和全局快捷键只交给当前工作台。后台弹窗不抢占当前会话焦点；标签支持方向键、Home、End 切换。
+- `npm run check` 33 项通过，原项目 1912 文件 SHA-256 校验通过；`npm run check:harness` 通过；完整 `vue-tsc --noEmit` 通过；12 个针对性前端测试文件的 69 项测试通过。新增测试覆盖多服务器、同服务器独立工作台、关闭隔离、创建失败保留原会话、拖放路由和工具栏复制/新建会话参数。
+- 真实 Rust 后端与临时回环 SSH 服务建立两个独立 PTY 终端，确认会话 ID 不同；关闭第一个后，第二个仍处于连接状态，随后正常关闭。测试不使用用户服务器或凭据。
+- 使用最终构建产物与模拟 RPC，在 1280×850 和 424×850 浏览器窗口验证三个标签（同服务器两个、另一服务器一个）、切换和 SFTP 面板状态保留。该结果属于界面与桥接验收，未在用户真实远程服务器上完成多服务器端到端验收。Impeccable 检测器下载未完成，未运行自动设计检测。
+- 新增根目录 `AGENTS.md`，要求 Git 提交标题与正文使用中文，并约定类型前缀、提交范围和验证要求。此次没有修改 `original/`。
+
 ## 可重复执行
 
 从项目根目录运行：
@@ -82,7 +91,7 @@ npm run check
 npm run check:harness
 node --check client.js
 npm --prefix frontend run typecheck
-npm --prefix frontend test -- src/lib/tooltipPosition.spec.ts src/HarnessApp.spec.ts src/harnessRuntime.spec.mts src/harnessBridge.spec.ts src/style.spec.ts src/lib/terminalInputQueue.spec.ts src/lib/workbenchCloseSessions.spec.ts src/lib/themeSync.spec.ts src/components/MetricsPanel.spec.ts
+npm --prefix frontend test -- src/lib/tooltipPosition.spec.ts src/HarnessApp.spec.ts src/harnessRuntime.spec.mts src/harnessBridge.spec.ts src/style.spec.ts src/lib/terminalInputQueue.spec.ts src/lib/workbenchCloseSessions.spec.ts src/lib/themeSync.spec.ts src/components/MetricsPanel.spec.ts src/components/PortForwardDialog.spec.ts src/components/OtpPanel.spec.ts src/lib/workbenchUiMirror.spec.ts
 npm run pack:bundle
 ```
 

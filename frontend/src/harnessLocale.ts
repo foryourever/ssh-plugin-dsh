@@ -1,4 +1,5 @@
 const zh: Record<string,string> = {
+  'New session':'新建会话','Open sessions':'已打开的会话','Close session':'关闭会话','Connect another server':'连接其他服务器',
   'SSH server':'SSH 服务器','Resume session':'返回会话','Choose file…':'选择文件…','Importing…':'正在导入…','Key imported':'已导入私钥',
   'Choose a private key file up to 1 MiB.':'请选择不超过 1 MiB 的私钥文件。',
   'The selected file is not a supported private key.':'所选文件不是支持的私钥，请选择 OpenSSH、PEM 或 PPK 私钥文件。',

@@ -16,3 +16,20 @@
 .ssh-upstream .toolbar{height:auto;flex:0 0 auto;flex-wrap:wrap;padding-block:4px}
 .ssh-upstream .toolbar-actions{flex-wrap:wrap;max-width:100%;min-width:0}
 .ssh-upstream .sftp-side-tabs,.ssh-upstream .sftp-filter-bar{flex-shrink:0}
+
+/* Sessions retain their own terminal, portals and file state while hidden. */
+.ssh-workbench-scope{height:100%;min-width:0;min-height:0;position:relative;contain:layout style;isolation:isolate;overflow:hidden}
+.ssh-session-strip{display:flex;align-items:stretch;flex:none;min-width:0;border-bottom:1px solid var(--border);background:var(--muted)}
+.ssh-session-tabs{display:flex;flex:1;min-width:0;overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.ssh-session-tab{display:flex;align-items:center;flex:none;max-width:260px;border-right:1px solid var(--border);border-bottom:2px solid transparent;color:var(--muted-foreground)}
+.ssh-session-tab.is-active{background:var(--background);color:var(--foreground);border-bottom-color:var(--primary)}
+.ssh-session-strip button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;border:0;border-radius:0;background:transparent;color:inherit;cursor:pointer;font:inherit}
+.ssh-session-tab [role=tab]{min-width:0;padding:7px 6px 7px 12px;text-align:left}
+.ssh-session-tab [role=tab] span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ssh-session-tab svg{flex:none}
+.ssh-session-strip .ssh-session-close{flex:none;width:28px;margin-right:4px}
+.ssh-session-strip .ssh-session-add{flex:none;width:38px;color:var(--foreground);border-left:1px solid var(--border)}
+.ssh-session-strip button:hover:not(:disabled){background:var(--accent);color:var(--foreground)}
+.ssh-session-strip button:focus-visible{outline:2px solid var(--primary);outline-offset:-3px}
+.ssh-session-strip button:disabled{opacity:.55;cursor:default}
+@container(max-width:560px){.ssh-native-bar{height:auto;min-height:44px;flex-wrap:wrap;padding-block:6px}.ssh-bar-title{min-width:70px}.ssh-session-tab{max-width:200px}}

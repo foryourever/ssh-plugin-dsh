@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useWorkbenchPortal } from "../../../lib/workbenchApi";
+const workbenchPortal = useWorkbenchPortal();
 import type { PopoverContentEmits, PopoverContentProps } from "reka-ui";
 import type { HTMLAttributes } from "vue";
 import { reactiveOmit } from "@vueuse/core";
@@ -21,7 +23,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
 </script>
 
 <template>
-  <PopoverPortal>
+  <PopoverPortal :to="workbenchPortal">
     <!-- @focus-outside.prevent：子视图切换（如快捷命令编辑器）会卸载当前聚焦的
          按钮，焦点回落 document.body；reka DismissableLayer 对 focus-outside 默认
          dismiss，会把整个 popover 关掉。迁移前弹层只响应「外部点击 + Esc」，

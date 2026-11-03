@@ -5,6 +5,7 @@
 // 下拉，宿主不支持时回退手输 connectionId）、把当前验证码写入终端输入行
 // （不经 App.vue：自带 sequenced-input 队列走 ssh/terminal/in/<sessionId>，不回车）。
 // 纯逻辑（协议解析 / 倒计时 / 草稿映射）在 lib/otpPanel.ts。
+import { useWorkbenchApi } from "../lib/workbenchApi";
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { Check, Copy, Eye, EyeOff, Link2, Loader2, Pencil, Plus, QrCode, RefreshCw, Send, Trash2, Unlink, X } from "@lucide/vue";
 import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
@@ -35,6 +36,7 @@ import {
   type OtpEntryView,
 } from "../lib/otpPanel";
 
+const workbenchApi = useWorkbenchApi();
 const props = defineProps<{
   t: (key: string, values?: Record<string, string | number>) => string;
 }>();
@@ -97,7 +99,7 @@ const CODE_PLACEHOLDER = "······";
 
 async function refresh() {
   try {
-    const payload = await window.dbxPlugin.invoke("otp/list");
+    const payload = await workbenchApi.invoke("otp/list");
     entries.value = parseOtpEntries(payload);
     bindings.value = parseOtpBindings(payload);
   } catch (cause) {
@@ -111,7 +113,7 @@ async function generateFor(entry: OtpEntryView) {
   if (generating.has(entry.id)) return;
   generating.add(entry.id);
   try {
-    const payload = await window.dbxPlugin.invoke("otp/generate", { entryId: entry.id });
+    const payload = await workbenchApi.invoke("otp/generate", { entryId: entry.id });
     delete retryBackoffAt[entry.id];
     delete retryBackoffStep[entry.id];
     const state = parseGenerateResponse(payload);
@@ -173,11 +175,11 @@ async function copyCode(entry: OtpEntryView) {
 // ssh/terminal/in/<sessionId>。面板自持队列实例（后端只用序号回 ack，不做
 // 顺序裁决），写入不带换行，shell 输入行停在原地。
 const inputQueue = createTerminalInputQueue({
-  send: (sessionId, payload) => window.dbxPlugin.sendBinary(`ssh/terminal/in/${sessionId}`, payload),
+  send: (sessionId, payload) => workbenchApi.sendBinary(`ssh/terminal/in/${sessionId}`, payload),
 });
 
 async function resolveSendTargetSessionId(): Promise<string> {
-  const api = window.dbxPlugin;
+  const api = workbenchApi;
   const context = api.context ?? (await api.request<Record<string, unknown>>("host.getContext").catch(() => undefined));
   const connectionId = normalizeConnectionText(context?.connectionId);
   const workbenchId = resolveWorkbenchId(context, "");
@@ -251,7 +253,7 @@ const draftError = computed(() => {
   if (otpDraftError(editor.draft)) return;
   saving.value = true;
   try {
-    const payload = await window.dbxPlugin.invoke<{ entry: unknown }>("otp/save", otpSaveParams(editor.draft));
+    const payload = await workbenchApi.invoke<{ entry: unknown }>("otp/save", otpSaveParams(editor.draft));
     const saved = parseOtpEntries({ entries: [payload?.entry] })[0];
     if (saved) {
       const existing = entries.value.findIndex((entry) => entry.id === saved.id);
@@ -272,7 +274,7 @@ async function confirmDelete() {
   const target = deleteTarget.value;
   if (!target) return;
   try {
-    const payload = await window.dbxPlugin.invoke<{ deleted: boolean }>("otp/delete", { id: target.id });
+    const payload = await workbenchApi.invoke<{ deleted: boolean }>("otp/delete", { id: target.id });
     if (payload?.deleted) {
       entries.value = entries.value.filter((entry) => entry.id !== target.id);
       delete codes[target.id];
@@ -293,7 +295,7 @@ async function importQrImage(file: File) {
   qrBusy.value = true;
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const payload = await window.dbxPlugin.invoke("otp/import-qr", { imageBase64: bytesToBase64(bytes) });
+    const payload = await workbenchApi.invoke("otp/import-qr", { imageBase64: bytesToBase64(bytes) });
     const draft = qrResponseToDraft(payload);
     if (!draft) {
       showActionError(new Error("otp/import-qr returned no secret"));
@@ -323,7 +325,7 @@ function onQrFileChange(event: Event) {
 
 async function loadConnections() {
   try {
-    const payload = await window.dbxPlugin.request<{ connections?: Array<{ id?: unknown; name?: unknown }> }>("host.listConnections");
+    const payload = await workbenchApi.request<{ connections?: Array<{ id?: unknown; name?: unknown }> }>("host.listConnections");
     connections.value = (payload?.connections ?? [])
       .map((connection) => ({ id: typeof connection.id === "string" ? connection.id : "", name: typeof connection.name === "string" ? connection.name : "" }))
       .filter((connection) => connection.id);
@@ -337,7 +339,7 @@ async function bindEntry(entry: OtpEntryView) {
   const connectionId = (bindPick[entry.id] || bindManual[entry.id] || "").trim();
   if (!connectionId) return;
   try {
-    await window.dbxPlugin.invoke("otp/bind", { connectionId, entryId: entry.id });
+    await workbenchApi.invoke("otp/bind", { connectionId, entryId: entry.id });
     bindings.value = { ...bindings.value, [connectionId]: entry.id };
     bindPick[entry.id] = "";
     bindManual[entry.id] = "";
@@ -348,7 +350,7 @@ async function bindEntry(entry: OtpEntryView) {
 
 async function unbindConnection(connectionId: string) {
   try {
-    const payload = await window.dbxPlugin.invoke<{ removed: boolean }>("otp/unbind", { connectionId });
+    const payload = await workbenchApi.invoke<{ removed: boolean }>("otp/unbind", { connectionId });
     if (payload?.removed) {
       const nextBindings = { ...bindings.value };
       delete nextBindings[connectionId];

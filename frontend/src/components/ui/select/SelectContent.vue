@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useWorkbenchPortal } from "../../../lib/workbenchApi";
+const workbenchPortal = useWorkbenchPortal();
 import type { SelectContentEmits, SelectContentProps } from "reka-ui";
 import type { HTMLAttributes } from "vue";
 import { useSlots } from "vue";
@@ -36,7 +38,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
 </script>
 
 <template>
-  <SelectPortal :disabled="disablePortal">
+  <SelectPortal :to="workbenchPortal" :disabled="disablePortal">
     <SelectContent
       data-slot="select-content"
       :data-align-trigger="position === 'item-aligned'"

@@ -7,8 +7,9 @@ import { bridgeState, closeWorkbench, installBridge, updateContext } from './har
 
 const sessions=vi.hoisted(()=>({mounts:0,unmounts:0,closes:0}));
 vi.mock('./App.vue',async()=>{
-  const {h,onMounted,onUnmounted}=await import('vue');
-  return {__esModule:true,default:{setup(){onMounted(()=>sessions.mounts++);onUnmounted(()=>sessions.unmounts++);window.dbxPlugin.workbench!.onClose!(()=>{sessions.closes++;});return()=>h('div',{class:'test-terminal'},'terminal scrollback');}}};
+  const {h,onMounted,onUnmounted,ref}=await import('vue');
+  const {useWorkbenchApi}=await import('./lib/workbenchApi');
+  return {__esModule:true,default:{setup(){const api=useWorkbenchApi();const input=ref('');onMounted(()=>sessions.mounts++);onUnmounted(()=>sessions.unmounts++);api.workbench!.onClose!(()=>{sessions.closes++;});return()=>h('div',{class:'test-terminal'},['terminal scrollback',h('input',{value:input.value,onInput:(event:any)=>input.value=event.target.value})]);}}};
 });
 const records=[{id:'a',name:'开发服务器',host:'example.test',username:'root',external_config:{authentication:'private-key',private_key_path:'/old/key'}},{id:'b',name:'第二台',host:'second.test',username:'dev'}];
 let wrapper:ReturnType<typeof mount>;let dispose:()=>Promise<void>;let call:ReturnType<typeof vi.fn>;
@@ -84,10 +85,44 @@ it('resumes the same workbench without reconnecting or losing terminal state; ex
   expect(sessions.closes).toBe(1);expect(sessions.unmounts).toBe(1);
   expect(rpcCalls('connections.disconnect')[0][2].params).toEqual({id:'a'});
 });
-it('switching to another server closes the old workbench and creates the requested one',async()=>{
+it('keeps both server workbenches mounted and restores each terminal input when switching tabs',async()=>{
   await wrapper.findAll('.ssh-row-actions')[0].find('button').trigger('click');await flushPromises();await flushPromises();
+  await wrapper.get('.test-terminal input').setValue('first server draft');
   await button('服务器').trigger('click');
   await wrapper.findAll('.ssh-row-actions')[1].find('button').trigger('click');await flushPromises();await flushPromises();
-  expect(sessions).toEqual({mounts:2,unmounts:1,closes:1});
+  expect(sessions).toEqual({mounts:2,unmounts:0,closes:0});
   expect(bridgeState.context.connectionId).toBe('b');
+  await wrapper.findAll('[role=tab]')[0].trigger('click');
+  expect(bridgeState.context.connectionId).toBe('a');
+  expect((wrapper.findAll('.test-terminal input')[0].element as HTMLInputElement).value).toBe('first server draft');
+  expect(rpcCalls('connections.connect')).toHaveLength(2);
+});
+it('opens multiple independent sessions for the same server and closes only the requested one',async()=>{
+  await wrapper.findAll('.ssh-row-actions')[0].find('button').trigger('click');await flushPromises();await flushPromises();
+  const firstId=bridgeState.context.workbenchId;
+  await button('新建会话').trigger('click');await flushPromises();await flushPromises();
+  expect(bridgeState.workbenches).toHaveLength(2);
+  expect(bridgeState.context.workbenchId).not.toBe(firstId);
+  expect(wrapper.findAll('[role=tab]')[1].text()).toContain('(2)');
+  await wrapper.findAll('.ssh-session-close')[0].trigger('click');await flushPromises();
+  expect(sessions).toEqual({mounts:2,unmounts:1,closes:1});
+  expect(rpcCalls('connections.disconnect')).toHaveLength(0);
+  expect(bridgeState.context.connectionId).toBe('a');
+  await button('断开连接').trigger('click');await flushPromises();
+  expect(sessions).toEqual({mounts:2,unmounts:2,closes:2});
+  expect(rpcCalls('connections.disconnect')).toHaveLength(1);
+  expect(wrapper.find('[role=tablist]').exists()).toBe(false);
+});
+it('supports keyboard navigation and keeps existing sessions when opening another server fails',async()=>{
+  await wrapper.findAll('.ssh-row-actions')[0].find('button').trigger('click');await flushPromises();await flushPromises();
+  await button('新建会话').trigger('click');await flushPromises();await flushPromises();
+  await wrapper.findAll('[role=tab]')[1].trigger('keydown',{key:'Home'});
+  expect(wrapper.findAll('[role=tab]')[0].attributes('aria-selected')).toBe('true');
+  await button('服务器').trigger('click');
+  const original=call.getMockImplementation() as (...args:any[])=>Promise<any>;
+  call.mockImplementation(async(...args:any[])=>args[2]?.method==='connections.connect'?{ok:false,error:'连接失败'}:original(...args));
+  await wrapper.findAll('.ssh-row-actions')[1].find('button').trigger('click');await flushPromises();
+  expect(wrapper.get('[role=alert]').text()).toContain('连接失败');
+  expect(sessions.closes).toBe(0);
+  expect(bridgeState.workbenches).toHaveLength(2);
 });

@@ -2,6 +2,7 @@
 // 端口映射管理弹窗（-L/-R，ssh(1)/Xshell 语义）：列表 + 添加表单 + 停止。
 // 状态、RPC 编排与 ssh/forward/state 事件订阅都在本组件内；App.vue 只负责
 // 工具栏入口。纯逻辑（解析/校验/格式化）在 lib/portForward.ts。
+import { useWorkbenchApi } from "../lib/workbenchApi";
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { Loader2, Plus, Square, X } from "@lucide/vue";
 import { workbenchMessage } from "../lib/i18n";
@@ -35,6 +36,7 @@ interface Props {
   standalone?: boolean;
   quickStart?: boolean;
 }
+const workbenchApi = useWorkbenchApi();
 const props = defineProps<Props>();
 const emit = defineEmits<{ "update:open": [boolean]; error: [unknown] }>();
 
@@ -86,7 +88,7 @@ async function refreshForwards() {
   const revision = ++forwardListRevision;
   forwardsLoading.value = true;
   try {
-    const payload = await window.dbxPlugin.invoke("ssh/forward/list", { connectionId: props.connectionId });
+    const payload = await workbenchApi.invoke("ssh/forward/list", { connectionId: props.connectionId });
     if (revision === forwardListRevision) forwards.value = parseForwards(payload);
   } catch (cause) {
     if (revision !== forwardListRevision) return;
@@ -100,7 +102,7 @@ async function refreshForwards() {
 /** 网卡地址探测（含回环）：失败静默降级为仅手输，选择器隐藏。 */
 async function refreshInterfaces() {
   try {
-    interfaces.value = parseInterfaces(await window.dbxPlugin.invoke("ssh/forward/interfaces"));
+    interfaces.value = parseInterfaces(await workbenchApi.invoke("ssh/forward/interfaces"));
   } catch (cause) {
     console.warn("[port-forward] interface probe failed", cause);
     interfaces.value = [];
@@ -117,12 +119,12 @@ async function startDraft(draft: ForwardFormDraft) {
   const startParams = forwardStartParams(draft, props.independent ? props.connectionId : props.sessionId!, !!props.independent);
   let payload: unknown;
   try {
-    payload = await window.dbxPlugin.invoke("ssh/forward/start", startParams);
+    payload = await workbenchApi.invoke("ssh/forward/start", startParams);
   } catch (cause) {
     if (!props.independent || !String(cause).includes("Connection is not active")) throw cause;
-    if (window.dbxPlugin.reopenConnection) await window.dbxPlugin.reopenConnection(props.connectionId);
-    else await window.dbxPlugin.request("host.reopenConnection", { connectionId: props.connectionId });
-    payload = await window.dbxPlugin.invoke("ssh/forward/start", startParams);
+    if (workbenchApi.reopenConnection) await workbenchApi.reopenConnection(props.connectionId);
+    else await workbenchApi.request("host.reopenConnection", { connectionId: props.connectionId });
+    payload = await workbenchApi.invoke("ssh/forward/start", startParams);
   }
   const started = parseForwards(payload);
   if (started.length) forwards.value = [...forwards.value.filter((row) => row.id !== started[0].id), ...started];
@@ -203,7 +205,7 @@ async function stopForward(id: string) {
   if (forwardsBusyId.value) return;
   forwardsBusyId.value = id;
   try {
-    await window.dbxPlugin.invoke("ssh/forward/stop", { id });
+    await workbenchApi.invoke("ssh/forward/stop", { id });
     forwards.value = forwards.value.filter((row) => row.id !== id);
   } catch (cause) {
     console.warn("[port-forward] stop failed", cause);
@@ -236,7 +238,7 @@ function handleForwardEvent(event: DbxPluginEvent) {
 
 let unsubscribeEvent: (() => void) | undefined;
 onMounted(() => {
-  unsubscribeEvent = window.dbxPlugin.onEvent(handleForwardEvent);
+  unsubscribeEvent = workbenchApi.onEvent(handleForwardEvent);
 });
 onBeforeUnmount(() => {
   unsubscribeEvent?.();

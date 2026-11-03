@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useWorkbenchPortal } from "../../../lib/workbenchApi";
+const workbenchPortal = useWorkbenchPortal();
 import type { DialogContentEmits, DialogContentProps } from "reka-ui";
 
 import type { HTMLAttributes } from "vue";
@@ -27,7 +29,7 @@ const forwarded = useForwardPropsEmits(delegatedProps, emits);
 </script>
 
 <template>
-  <DialogPortal>
+  <DialogPortal :to="workbenchPortal">
     <DialogOverlay :class="props.overlayClass" />
     <div data-slot="dialog-positioner" :class="cn('fixed inset-0 z-[80] grid place-items-center p-4 pointer-events-none grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]', props.portalClass)">
       <DialogContent

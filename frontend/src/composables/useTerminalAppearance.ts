@@ -27,10 +27,13 @@ export function useTerminalAppearance(options: {
   terminalWriteThrottle: TerminalWriteThrottle;
   terminalSyncOutput: TerminalSyncOutput;
   terminal: () => Terminal | undefined;
+  root?: () => HTMLElement;
   scheduleFit: () => void;
   setTerminalFont: (family: string | null, size: number | null) => void;
 }) {
   const { terminal: terminalGet, t, showNotice, appearance, terminalAppearance, terminalFontOverride, terminalFontSize, terminalWriteThrottle, terminalSyncOutput, scheduleFit, setTerminalFont } = options;
+
+const appearanceRoot = options.root || (() => document.documentElement);
 
 const OSC_COLOR_FALLBACK = { foreground: "#c9d1d9", background: "#0d1117" };
 
@@ -73,7 +76,7 @@ function terminalTheme(): TerminalThemeLike {
 // 终端内边距经 CSS 变量下发（style.css 的 .terminal-host .xterm 读取）；
 // 未设置的方向删变量，回落内置值（左 10 / 右 0 / 上 5 / 下 8）。
 function applyTerminalPaddingVars() {
-  const root = document.documentElement;
+  const root = appearanceRoot();
   const padding = terminalPaddingVars(terminalAppearance.value.settings);
   const entries: Array<[string, string | null]> = [
     ["--ssh-terminal-padding-left", padding.left],
@@ -94,7 +97,7 @@ function applyTerminalPaddingVars() {
 function applyTerminalAppearance() {
   applyTerminalPaddingVars();
   const theme = terminalTheme();
-  document.documentElement.style.setProperty("--ssh-terminal-background", theme.background);
+  appearanceRoot().style.setProperty("--ssh-terminal-background", theme.background);
   const term = terminalGet();
   if (!term) return;
   const patch = terminalOptionPatch(terminalAppearance.value.settings);
@@ -212,7 +215,7 @@ function applyAppearance(next: DbxPluginAppearanceInput) {
   // 宿主可能缺字段（1.0 或部分下发、1.1 theme 通道只带颜色令牌），按 DBX 规范色板补齐。
   const resolved = resolveAppearance(next);
   appearance.value = resolved;
-  const root = document.documentElement;
+  const root = appearanceRoot();
   root.dataset.theme = resolved.colorScheme;
   root.style.colorScheme = resolved.colorScheme;
   applyAppearanceColorVars(root, resolved.colors);
@@ -273,7 +276,7 @@ function registerModeQueryHandlers() {
 // var(--font-sans)/var(--font-mono) 引用（这正是宿主全局字体此前不生效的根因），
 // 撤出内联后桥引用直接命中宿主令牌，宿主改字体经 SDK 令牌推送自动跟随。
 function followHostFonts(resolved: ReturnType<typeof resolveAppearance>) {
-  const root = document.documentElement;
+  const root = appearanceRoot();
   root.style.removeProperty("--ui-font-family");
   root.style.removeProperty("--terminal-font-family");
   const term = terminalGet();
@@ -287,7 +290,7 @@ function followHostFonts(resolved: ReturnType<typeof resolveAppearance>) {
 // xterm 需要具体字体串（不认 CSS 变量）：取 --terminal-font-family 的计算值
 // （桥已把宿主令牌/回退解析好），计算值为空时回退 appearance 解析值。
 function hostTerminalFontFamily(resolved: ReturnType<typeof resolveAppearance>): string {
-  const computed = getComputedStyle(document.documentElement).getPropertyValue("--terminal-font-family").trim();
+  const computed = getComputedStyle(appearanceRoot()).getPropertyValue("--terminal-font-family").trim();
   return computed || resolved.terminal.fontFamily;
 }
 

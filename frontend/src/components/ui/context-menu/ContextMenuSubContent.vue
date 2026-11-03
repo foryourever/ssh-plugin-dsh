@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useWorkbenchPortal } from "../../../lib/workbenchApi";
+const workbenchPortal = useWorkbenchPortal();
 import type { ContextMenuSubContentEmits, ContextMenuSubContentProps } from "reka-ui";
 import type { HTMLAttributes } from "vue";
 import { reactiveOmit } from "@vueuse/core";
@@ -17,7 +19,7 @@ const forwardedProps = useForwardPropsEmits(delegatedProps, emits);
 </script>
 
 <template>
-  <ContextMenuPortal>
+  <ContextMenuPortal :to="workbenchPortal">
     <ContextMenuSubContent
       data-slot="context-menu-sub-content"
       v-bind="{ ...forwardedProps, ...$attrs }"

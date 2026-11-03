@@ -18,6 +18,12 @@ function localServer(key) {
     client.on('authentication', ctx => ctx.method === 'password' && ctx.username === 'test-user' && ctx.password === 'test-only-password' ? ctx.accept() : ctx.reject(['password']));
     client.on('ready', () => client.on('session', accept => {
       const session = accept();
+      session.on('pty', accept => accept());
+      session.on('shell', accept => {
+        const stream = accept();
+        stream.write('loopback-test> ');
+        stream.on('data', data => stream.write(data));
+      });
       session.on('exec', (accept, reject, info) => {
         const stream = accept();
         if (info.command === 'printf harness-ssh-ok') stream.write('harness-ssh-ok');
@@ -75,6 +81,19 @@ test('real backend: SSH exec, SFTP roundtrip, saved registry, encryption and rea
   assert.match(JSON.stringify(output),/harness-ssh-ok/);
   const multi=result(await callTool('ssh_multi_exec',{targets:['test-server'],command:'printf harness-ssh-ok'}));
   assert.match(JSON.stringify(multi),/harness-ssh-ok/);
+  // Two workbenches on one saved server own separate PTYs. Closing one must
+  // leave its sibling listed and connected, without a connection disconnect.
+  const first = await service.request('ssh/session/open', { connectionId: 'test-server', workbenchId: 'first-tab', requestedSessionId: 'first-terminal', cols: 80, rows: 24 });
+  const second = await service.request('ssh/session/open', { connectionId: 'test-server', workbenchId: 'second-tab', requestedSessionId: 'second-terminal', cols: 80, rows: 24 });
+  assert.notEqual(first.sessionId, second.sessionId);
+  const sessions = await service.request('ssh/sessions/list', {});
+  assert.ok(sessions.sessions.some(row => row.sessionId === first.sessionId && row.workbenchId === 'first-tab'));
+  assert.ok(sessions.sessions.some(row => row.sessionId === second.sessionId && row.workbenchId === 'second-tab'));
+  await service.request('ssh/session/close', { sessionId: first.sessionId });
+  const remaining = await service.request('ssh/sessions/list', {});
+  assert.ok(!remaining.sessions.some(row => row.sessionId === first.sessionId));
+  assert.ok(remaining.sessions.some(row => row.sessionId === second.sessionId && row.connected));
+  await service.request('ssh/session/close', { sessionId: second.sessionId });
   const read=result(await service.callTool('sftp_read_file',{connectionId:'test-server',path:'/hello.txt'})); assert.match(JSON.stringify(read),/hello sftp/);
   result(await service.callTool('sftp_write_file',{connectionId:'test-server',path:'/roundtrip.txt',content:'你好 Harness',overwrite:true}));
   assert.equal(remote.files.get('/roundtrip.txt').toString(),'你好 Harness');
