@@ -1,6 +1,6 @@
 {
   "name": "@local/dsh-plugin-ssh",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "DeepSeek Harness SSH terminal, SFTP and agent tools, adapted from dbx-plugin-ssh.",
   "private": true,
   "type": "module",

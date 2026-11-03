@@ -1,10 +1,12 @@
 import { createApp } from 'vue';
 import { installBridge, bridgeState, closeWorkbench, updateContext } from './harnessBridge';
+import { themeBridgeCss } from '../shared/frontend/themeSync';
 import '@xterm/xterm/css/xterm.css';
 import './style.css';
 import './styles/tailwind.css';
 import './harness.css';
 declare const require: (id: string) => any;
+declare const __DSH_SSH_CSS__: string;
 export default {
   inject: ['slots', 'connection', 'locale'],
   apply(ctx: any) {
@@ -20,7 +22,10 @@ export default {
     surface.id = 'dsh-ssh-root';
     Object.assign(surface.style,{height:'100%',width:'100%',minHeight:'0',minWidth:'0',position:'relative',contain:'layout style',isolation:'isolate',overflow:'hidden'});
     const style = document.createElement('style');
-    style.textContent = '__DSH_SSH_CSS__';
+    // The upstream entry installs this bridge before mounting. Harness uses a
+    // different entry, so include it here too. Its generated selectors all use
+    // :root; bind them to this surface instead of changing the host document.
+    style.textContent = __DSH_SSH_CSS__ + '\n' + themeBridgeCss().replaceAll(':root', '#dsh-ssh-root');
     const vueMount = document.createElement('div');
     vueMount.className = 'ssh-vue-mount';vueMount.style.height='100%';
     surface.append(style,vueMount);

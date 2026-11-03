@@ -10,7 +10,7 @@ beforeEach(()=>{
   call=vi.fn(async(_namespace:string,endpoint:string,payload:any)=>endpoint==='ssh-plugin/events'?await new Promise(resolve=>{deliver=resolve;}):{ok:true,value:{method:payload.method,params:payload.params}});
   dispose=installBridge({connection:{rpc:{call}}},document.getElementById('dsh-ssh-root')!);
 });
-afterEach(async()=>{await dispose?.();vi.restoreAllMocks();});
+afterEach(async()=>{await dispose?.();document.body.removeAttribute('style');vi.restoreAllMocks();});
 describe('native DBX bridge',()=>{
   it('routes host methods, original backend methods, and binary bytes through verified RPC envelopes',async()=>{
     await window.dbxPlugin.invoke('ssh/session/list',{connectionId:'a'});
@@ -39,6 +39,29 @@ describe('native DBX bridge',()=>{
     expect(document.getElementById('host-sentinel')?.textContent).toBe('Host');
     expect(document.getElementById('dsh-ssh-root')?.style.getPropertyValue('--background')).toBeTruthy();
     expect(document.documentElement.style.getPropertyValue('--background')).toBe('');
+  });
+  it('provides semantic chart and icon colors when Harness has no status tokens',()=>{
+    const root=document.getElementById('dsh-ssh-root')!;
+    expect(root.style.getPropertyValue('--info')).toBe('rgb(37 99 235)');
+    expect(root.style.getPropertyValue('--success')).toBe('rgb(22 163 74)');
+    expect(root.style.getPropertyValue('--warning')).toBe('rgb(217 119 6)');
+    expect(window.dbxPlugin.theme?.tokens?.['--color-info']).toBe('rgb(37 99 235)');
+    expect(root.style.getPropertyValue('--color-info')).toBe('rgb(37 99 235)');
+  });
+  it('updates status colors on a dark theme change and honors supplied host colors',async()=>{
+    const root=document.getElementById('dsh-ssh-root')!;
+    document.body.style.colorScheme='dark';
+    await new Promise(resolve=>setTimeout(resolve,0));
+    expect(root.dataset.theme).toBe('dark');
+    expect(root.style.getPropertyValue('--success')).toBe('rgb(74 222 128)');
+    expect(root.style.getPropertyValue('--warning')).toBe('rgb(251 191 36)');
+    expect(root.style.getPropertyValue('--info')).toBe('rgb(96 165 250)');
+    document.body.style.setProperty('--color-info','#13579b');
+    document.body.style.setProperty('--color-success','#24682a');
+    await new Promise(resolve=>setTimeout(resolve,0));
+    expect(root.style.getPropertyValue('--color-info')).toBe('#13579b');
+    expect(root.style.getPropertyValue('--success')).toBe('#24682a');
+    expect(document.documentElement.style.getPropertyValue('--info')).toBe('');
   });
   it('hydrates storage through the host endpoint',async()=>{
     await window.dbxPlugin.storage!.set('ssh-font',13);

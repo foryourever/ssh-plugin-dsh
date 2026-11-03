@@ -1,6 +1,6 @@
 # 验证记录
 
-验证环境：macOS ARM64，Node.js 22.23.1，2026-11-03。插件版本 1.0.4；上游 0.7.13-beta.1，提交 `93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b`。
+验证环境：macOS ARM64，Node.js 22.23.1，2026-11-03。插件版本 1.0.5；上游 0.7.13-beta.1，提交 `93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b`。
 
 ## 已通过
 
@@ -16,7 +16,7 @@
 | 完整前端构建 | 约 24.78 MiB 的原生懒加载客户端，内置 Vue、全部工作台模块、CSS、字体/资源及 MP4v/PPTX worker；构建脚本拒绝遗漏的外部资源。React 来自宿主。 |
 | 前端类型 | 完整 `vue-tsc --noEmit` 通过。 |
 | 安装归档 | 自定义 npm 兼容 `.tgz` 含完整原版 1912 个文件；在独立临时安装目录执行真实 npm 安装，后端可启动并返回 16 个工具。npm 将三个 `.gitignore` 改名为 `.npmignore`，校验脚本兼容该改名并核对原字节。 |
-| 前端测试 | 6 个针对性测试文件，29 项通过；包括经真实 Cordis 激活生成后的客户端工厂、注册 `main` / `sidebar.panellist` 槽位、实际挂载 Vue 服务器管理表单、终端输入队列、工作台关闭与桥接。没有 iframe。 |
+| 前端测试 | 8 个针对性测试文件，41 项通过；包括经真实 Cordis 激活生成后的客户端工厂、注册 `main` / `sidebar.panellist` 槽位、实际挂载 Vue 服务器管理表单、终端输入队列、工作台关闭与桥接。没有 iframe。 |
 
 ## 1.0.1 启动修复
 
@@ -53,6 +53,14 @@
 
 浏览器视觉检查使用本机隔离预览与模拟 RPC，无真实服务器凭据：标准 1280×850 和窄窗口表单；系统文件选择器成功导入无扩展名测试私钥；文件面板缩至 255 像素时工具栏高 87 像素，其底边与文件区顶边均为 167 像素，无重叠。该预览只验证界面和桥接，不作为真实远端认证验收。
 
+## 1.0.5 图标与监控图表颜色修复
+
+Harness 使用独立入口，未执行原版 `main.ts` 中的 `installHostThemeBridge()`，导致 `--info`、`--success`、`--warning` 等变量缺失；这些变量同时控制工具栏、状态指示、CPU/内存/磁盘仪表盘及曲线。适配入口现将原版主题桥生成的 CSS 限定到 `#dsh-ssh-root` 后一同装载，补回完整的主题变量及遮罩。宿主外观桥同时解析并写入对应的 `--color-*` 令牌，优先使用宿主颜色，缺失时使用上游亮暗色默认值；主题切换会重新解析，避免变量别名循环及颜色停留在旧主题。
+
+构建 CSS 插入点改为表达式，防止压缩器合并相邻字符串后遗漏 CSS。生成产物的测试覆盖实际 CSS 装载、语义色与遮罩解析，以及宿主根节点不受影响；桥接测试覆盖默认颜色、切换暗色与宿主自定义颜色。原监控组件的 6 项测试同时通过。
+
+隔离浏览器使用模拟监控数据验证：亮色 CPU/内存/磁盘仪表盘 stroke 分别为 `rgb(37,99,235)` / `rgb(22,163,74)` / `rgb(217,119,6)`；切换暗色后分别为 `rgb(96,165,250)` / `rgb(74,222,128)` / `rgb(251,191,36)`，趋势面积与网络紫色曲线正常显示。验证未连接用户真实服务器。
+
 ## 可重复执行
 
 从项目根目录运行：
@@ -62,7 +70,7 @@ npm run check
 npm run check:harness
 node --check client.js
 npm --prefix frontend run typecheck
-npm --prefix frontend test -- src/HarnessApp.spec.ts src/harnessRuntime.spec.mts src/harnessBridge.spec.ts src/style.spec.ts src/lib/terminalInputQueue.spec.ts src/lib/workbenchCloseSessions.spec.ts
+npm --prefix frontend test -- src/HarnessApp.spec.ts src/harnessRuntime.spec.mts src/harnessBridge.spec.ts src/style.spec.ts src/lib/terminalInputQueue.spec.ts src/lib/workbenchCloseSessions.spec.ts src/lib/themeSync.spec.ts src/components/MetricsPanel.spec.ts
 npm run pack:bundle
 ```
 

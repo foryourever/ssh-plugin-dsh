@@ -30,7 +30,10 @@ const tree=postcss.parse(css);
 const animations=new Map();tree.walkAtRules(/keyframes$/i,rule=>{const original=rule.params;const name='dsh-ssh-'+original;animations.set(original,name);rule.params=name;});
 tree.walkDecls(declaration=>{if(declaration.prop.includes('animation')||declaration.prop.startsWith('--'))for(const [name,scoped] of animations)declaration.value=declaration.value.replace(new RegExp('(^|[\\s,])'+name+'(?=$|[\\s,])','g'),(_,before)=>before+scoped);});
 tree.walkRules(rule=>{if(rule.parent?.type==='atrule'&&/keyframes$/i.test(rule.parent.name))return;rule.selectors=rule.selectors.map(scopeSelector);});
-const bundle=script.code.replace(/(["'`])__DSH_SSH_CSS__\1/g,()=>JSON.stringify(tree.toString()));
+// Use an expression placeholder: minification may merge string placeholders
+// with adjacent literals before CSS is available for embedding.
+if(!script.code.includes('__DSH_SSH_CSS__'))throw new Error('Missing CSS insertion point.');
+const bundle=script.code.replace(/\b__DSH_SSH_CSS__\b/g,()=>JSON.stringify(tree.toString()));
 const output='window.__ModuleLoader__.load({id:"@local/dsh-plugin-ssh",factory(require){\nconst __dshReact=require("react");\n'+bundle+'\nreturn DshSshClient.default || DshSshClient;\n}});\n';
 await writeFile(path.join(root,'client.js'),output);
 console.log(`Built client.js (${(Buffer.byteLength(output)/1024/1024).toFixed(2)} MiB), with isolated CSS and complete upstream workbench.`);

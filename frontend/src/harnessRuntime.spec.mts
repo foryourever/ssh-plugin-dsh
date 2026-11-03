@@ -39,6 +39,13 @@ it('loads the emitted lazy module and mounts the complete native server manager'
  expect(css).toContain('#dsh-ssh-root .sftp-body');
  expect(css).not.toContain('sftp-#dsh-ssh-root');
  expect(css).not.toContain('__DSH_SSH_CSS__');
+ // Exercise the emitted Harness entry: the upstream main.ts is not loaded here.
+ const pluginRoot=root.querySelector<HTMLElement>('#dsh-ssh-root')!;
+ expect(getComputedStyle(pluginRoot).getPropertyValue('--info')).toBe('rgb(37 99 235)');
+ expect(getComputedStyle(pluginRoot).getPropertyValue('--success')).toBe('rgb(22 163 74)');
+ expect(getComputedStyle(pluginRoot).getPropertyValue('--warning')).toBe('rgb(217 119 6)');
+ expect(getComputedStyle(pluginRoot).getPropertyValue('--overlay')).toBe('rgb(0 0 0 / 40%)');
+ expect(getComputedStyle(document.documentElement).getPropertyValue('--overlay')).toBe('');
  expect(root.textContent).toContain('Add your first server');
  const add=Array.from(root.querySelectorAll('button')).find(button=>button.textContent?.includes('Add server'))!;
  add.click();await flushPromises();
