@@ -23,6 +23,19 @@ test('native bundle registers all tools and authenticated RPC; disposal releases
     assert.equal(tools.size,16);assert.equal(handlers.size,4);
     for(const tool of tools.values()){assert.equal(tool.parameters.type,'object');assert.equal(typeof tool.output.render,'function');}
     const signal=new AbortController().signal;
+    for (const name of ['ssh_list_connections', 'ssh_list_known_hosts']) {
+      const listed = await tools.get(name).execute({}, { signal });
+      assert.equal(listed.isError, false);
+      const data = JSON.parse(listed.content.find(block => block.type === 'text').text);
+      assert.deepEqual(data[name === 'ssh_list_connections' ? 'connections' : 'knownHosts'], []);
+    }
+    const removed = await tools.get('ssh_remove_known_host').execute({ host: 'absent.invalid' }, { signal });
+    assert.equal(removed.isError, false);
+    await assert.rejects(tools.get('ssh_remove_known_host').execute({}, { signal }), /host: required/);
+    await assert.rejects(tools.get('ssh_exec').execute({ command: 'pwd' }, { signal }), /connectionId/);
+    await assert.rejects(tools.get('sftp_read_file').execute({ path: '/test' }, { signal }), /connectionId/);
+    await assert.rejects(tools.get('ssh_multi_exec').execute({ targets: [], command: 'pwd' }, { signal }), /too few items/);
+    await assert.rejects(tools.get('ssh_multi_exec').execute({ targets: ['test'] }, { signal }), /command: required/);
     const manifest=await rpc(handlers,'host',{method:'manifest'},signal);assert.equal(manifest.ok,true);assert.equal(manifest.value.version,'0.7.13-beta.1');
     const invalid=await rpc(handlers,'host',{method:'anything'},signal);assert.equal(invalid.ok,false);
     const capabilities=await rpc(handlers,'host',{method:'capabilities'},signal);assert.equal(capabilities.value.ai,false);

@@ -44,3 +44,26 @@ test('tool executes upstream name and preserves canonical MCP envelope', async (
   assert.deepEqual(call,['ssh_example',{x:'a'},{signal}]); assert.deepEqual(tool.output.render({},value),[{type:'text',text:'ok'}]);
   await assert.rejects(tool.execute({},{signal}),/required/);
 });
+test('snapshot tools repair unrelated selectors while preserving real argument constraints', async () => {
+  const definitions = JSON.parse(await fs.readFile(new URL('../tools.snapshot.json', import.meta.url), 'utf8'));
+  const before = structuredClone(definitions);
+  const calls = [];
+  const service = { async callTool(name, args) { calls.push({ name, args }); return { content: [], isError: false }; } };
+  const tools = new Map(definitions.map(definition => [definition.name, toolDefinition(definition, service)]));
+  const exec = { signal: new AbortController().signal };
+  for (const [name, args] of [
+    ['ssh_list_connections', {}], ['ssh_list_known_hosts', {}],
+    ['ssh_remove_known_host', { host: 'absent.invalid' }],
+    ['ssh_multi_exec', { targets: ['test'], command: 'pwd' }],
+  ]) await tools.get(name).execute(args, exec);
+  assert.equal(calls.length, 4);
+  await assert.rejects(tools.get('ssh_remove_known_host').execute({}, exec), /host: required/);
+  await assert.rejects(tools.get('ssh_multi_exec').execute({ targets: [], command: 'pwd' }, exec), /too few items/);
+  await assert.rejects(tools.get('ssh_multi_exec').execute({ targets: Array(11).fill('test'), command: 'pwd' }, exec), /too many items/);
+  await assert.rejects(tools.get('ssh_multi_exec').execute({ targets: [123], command: 'pwd' }, exec), /expected string/);
+  await assert.rejects(tools.get('ssh_multi_exec').execute({ targets: ['test'] }, exec), /command: required/);
+  await assert.rejects(tools.get('ssh_exec').execute({ command: 'pwd' }, exec), /connectionId/);
+  await assert.rejects(tools.get('sftp_read_file').execute({ path: '/test' }, exec), /connectionId/);
+  assert.equal(calls.length, 4, 'invalid calls must never reach the backend');
+  assert.deepEqual(definitions, before, 'raw upstream definitions stay intact');
+});

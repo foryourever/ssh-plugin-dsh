@@ -6,6 +6,7 @@ import path from 'node:path';
 import { generateKeyPairSync } from 'node:crypto';
 import ssh2 from 'ssh2';
 import { SSHService } from '../src/service.js';
+import { toolDefinition } from '../src/tools.js';
 
 // A real SSH wire server on loopback only; credentials and files exist only in this test.
 // It never executes shell input. Its SFTP filesystem is an in-memory Map.
@@ -61,13 +62,19 @@ test('real backend: SSH exec, SFTP roundtrip, saved registry, encryption and rea
   t.after(async()=>{await service.close();await remote.close();});
   await service.start();
   const tools=await service.tools(); assert.equal(tools.length,16);
-  const empty=result(await service.callTool('ssh_list_connections',{})); assert.deepEqual(empty.connections,[]);
+  // Use the Agent-facing adapter, including schema validation, not just the backend.
+  const registered = new Map(tools.map(tool => [tool.name, toolDefinition(tool, service)]));
+  const callTool = (name, args) => registered.get(name).execute(args, { signal: new AbortController().signal });
+  const empty=result(await callTool('ssh_list_connections',{})); assert.deepEqual(empty.connections,[]);
   const connection={id:'test-server',name:'Loopback only',host:'127.0.0.1',port,username:'test-user',password:'test-only-password',external_config:{authentication:'password',read_only:false}};
   const saved=await service.host('connections.save',{connection}); assert.equal(saved.password,undefined);
   assert.ok(!(await fs.readFile(path.join(dataDir,'connections.json'),'utf8')).includes('test-only-password'));
-  const list=result(await service.callTool('ssh_list_connections',{})); assert.equal(list.connections.length,1); assert.equal(list.connections[0].id,'test-server');
-  const output=result(await service.callTool('ssh_exec',{connectionId:'test-server',command:'printf harness-ssh-ok'}));
+  const list=result(await callTool('ssh_list_connections',{})); assert.equal(list.connections.length,1); assert.equal(list.connections[0].id,'test-server');
+  assert.ok(!JSON.stringify(list).includes('test-only-password'));
+  const output=result(await callTool('ssh_exec',{connectionId:'test-server',command:'printf harness-ssh-ok'}));
   assert.match(JSON.stringify(output),/harness-ssh-ok/);
+  const multi=result(await callTool('ssh_multi_exec',{targets:['test-server'],command:'printf harness-ssh-ok'}));
+  assert.match(JSON.stringify(multi),/harness-ssh-ok/);
   const read=result(await service.callTool('sftp_read_file',{connectionId:'test-server',path:'/hello.txt'})); assert.match(JSON.stringify(read),/hello sftp/);
   result(await service.callTool('sftp_write_file',{connectionId:'test-server',path:'/roundtrip.txt',content:'你好 Harness',overwrite:true}));
   assert.equal(remote.files.get('/roundtrip.txt').toString(),'你好 Harness');

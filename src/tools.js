@@ -29,16 +29,21 @@ export function validateMcp(schema, value, at = 'arguments') {
   return errors;
 }
 export function toolDefinition(upstream, service) {
+  const inputSchema = { ...upstream.inputSchema };
+  // Upstream 0.7.13-beta.1 adds a single-connection selector to every tool.
+  // These handlers use no connection, host+port, or targets respectively.
+  // Keep their own required fields and array bounds; preserve the raw schema.
+  if (['ssh_list_connections', 'ssh_list_known_hosts', 'ssh_remove_known_host', 'ssh_multi_exec'].includes(upstream.name)) delete inputSchema.anyOf;
   return {
     name: upstream.name,
     description: upstream.description.replaceAll('DBX', 'Harness SSH'),
-    parameters: harnessSchema(upstream.inputSchema),
+    parameters: harnessSchema(inputSchema),
     output: { schema: {}, render: (_args, value) => {
       if (Array.isArray(value?.content)) return value.content.filter(block => block.type === 'text').map(block => ({ type: 'text', text: block.text }));
       return [{ type: 'text', text: JSON.stringify(value) }];
     } },
     async execute(args, exec) {
-      const errors = validateMcp(upstream.inputSchema, args);
+      const errors = validateMcp(inputSchema, args);
       if (errors.length) throw new Error(errors.join('; '));
       const result = await service.callTool(upstream.name, args, { signal: exec.signal });
       if (result?.isError) throw new Error((result.content || []).filter(block => block.type === 'text').map(block => block.text).join('\n') || 'Upstream SSH tool failed.');

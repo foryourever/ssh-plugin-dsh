@@ -1,6 +1,6 @@
 # 验证记录
 
-验证环境：macOS ARM64，Node.js 22.23.1，2026-11-03。插件版本 1.0.6；上游 0.7.13-beta.1，提交 `93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b`。
+验证环境：macOS ARM64，Node.js 22.23.1，2026-11-03。插件版本 1.0.7；上游 0.7.13-beta.1，提交 `93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b`。
 
 ## 已通过
 
@@ -10,7 +10,7 @@
 | 官方后端 | 发布归档 SHA-256：`e079df9a96550c4db9a4c783e40af2174d1fcf2997710da274e66ca006344507`；提取的 ARM64 后端 SHA-256：`eac95e40fee45e9db545d82efcb505d4f8462ffd8166b93360381f528b4c10f6`。 |
 | 原版协议 | 真实后端完成 `plugin/initialize`，返回协议 1；`mcp/tools` 实际返回全部 16 个工具。 |
 | Harness Schema | 使用本机已安装 Harness 的真实 `assertObjectJsonSchema` / `assertSupportedJsonSchema`，16 个注册定义全部通过。 |
-| Host 测试 | `npm run check`：32 项通过，覆盖真实 Cordis 激活、HTTP RPC 信封校验与取消信号、分帧、UTF-8、多请求关联、二进制、反向用户输入、畸形及超长帧、进程退出、取消、超时、重启、加密存储、篡改拒绝、工具参数和注册资源释放。 |
+| Host 测试 | `npm run check`：33 项通过，覆盖真实 Cordis 激活、HTTP RPC 信封校验与取消信号、分帧、UTF-8、多请求关联、二进制、反向用户输入、畸形及超长帧、进程退出、取消、超时、重启、加密存储、篡改拒绝、工具参数和注册资源释放。 |
 | 真实 Harness 服务 | `npm run check:harness`：使用本机 Harness 0.2.0-rc.2 的真实 Connection、WebServer、ToolRuntime、SystemPrompt 和 Cordis；临时凭据存储、随机回环端口。确认插件 ACTIVE、16 个工具注册、真实 cookie 认证 HTTP 调用、未认证 401、跨源 403，以及卸载后工具和路由清理。 |
 | 真实 SSH/SFTP | 临时回环 SSH 服务端，临时 RSA 主机密钥与测试密码；真实 Rust 客户端执行命令、读取文件、写入并读取中文内容；只读连接写入被拒绝。服务端仅返回测试响应，未执行任意 shell 输入，未连接真实服务器。 |
 | 完整前端构建 | 约 24.78 MiB 的原生懒加载客户端，内置 Vue、全部工作台模块、CSS、字体/资源及 MP4v/PPTX worker；构建脚本拒绝遗漏的外部资源。React 来自宿主。 |
@@ -66,6 +66,12 @@ Harness 使用独立入口，未执行原版 `main.ts` 中的 `installHostThemeB
 Harness 根节点的 `contain: layout style` 为 fixed 提示框建立了包含块，而原版使用视口坐标，导致侧栏与顶部栏的偏移被重复叠加。定位现将图标的视口坐标转换为 SSH 容器坐标，并按容器宽高钳位、翻转；独立运行时保留视口坐标回退。提示框最大宽度跟随容器，窗口缩放时收起；宿主区域及隐藏工作台不接管 title。
 
 新增 4 项几何回归覆盖侧栏与顶部栏偏移、侧栏宽度变化、左右边缘钳位和底部翻转。完整类型检查及 9 个针对性测试文件的 45 项测试通过。隔离浏览器以实际构建产物、模拟 RPC 验证 280 像素侧栏及 52 像素顶部栏布局：「端口映射」按钮中心与提示框中心均为视口 x=870，提示框顶边位于按钮底边下方 6 像素；右侧「SFTP 传输任务」提示框距容器右边缘至少 8 像素。键盘聚焦正常显示，缩放后提示框收起，宿主按钮 title 保留。未连接真实远端服务器。
+
+## 1.0.7 Agent 工具参数校验修复
+
+新增 Agent 入口回归后，修复前真实后端测试和已注册工具测试均复现截图中的 `requires a saved connectionId/connectionName or an inline host and username`。根因是上游 `mcp.rs` 工具定义生成器无条件为所有工具插入单连接 `anyOf`，适配层又在执行前严格校验该定义。
+
+适配层仅移除 `ssh_list_connections`、`ssh_list_known_hosts`、`ssh_remove_known_host` 和 `ssh_multi_exec` 不适用的顶层选择条件，不修改原始源码及工具快照。修复后 33 项测试通过：实际注册的两个列表工具接受空对象，删除指纹仅需主机参数；经 Agent 包装器和真实 Rust 后端列出空列表、已保存连接，并执行回环多目标命令。缺失必填字段、无连接的单目标命令/SFTP、空目标或超过 10 个目标仍被拒绝；列表未泄露测试密码。`check:harness` 的真实宿主激活、16 个工具、HTTP 认证与卸载清理检查通过。未重载用户运行中的插件或连接会话。
 
 ## 可重复执行
 
