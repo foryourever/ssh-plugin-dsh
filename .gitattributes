@@ -1,0 +1,4 @@
+* text=auto eol=lf
+/bin/* binary
+/original/** -text
+/frontend/shared/** -text

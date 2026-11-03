@@ -1,0 +1,4 @@
+- insert:
+    - id: local-ssh
+      name: '@local/dsh-plugin-ssh'
+      config: {}

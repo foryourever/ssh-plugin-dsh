@@ -1,0 +1,21 @@
+# Local dependencies and download caches
+/node_modules/
+/frontend/node_modules/
+/.npm-cache/
+/.package-smoke*/
+
+# Regenerable archives and development build output
+/dist/
+/frontend/dist/
+/bin/.cargo-target/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Local connection data and private credentials must stay outside source control
+.env
+.env.local
+*.pem
+*.key
+
+# Preserve original/ exactly; its tracked fixtures and metadata are added explicitly.

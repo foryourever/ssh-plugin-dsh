@@ -1,0 +1,21 @@
+This package adapts jinpy666/dbx-plugin-ssh for DeepSeek Harness.
+Upstream: https://github.com/jinpy666/dbx-plugin-ssh
+Snapshot: 93c0c80cabffb08eec8fae4f7cfc0ed657ce8e9b (0.7.13-beta.1)
+Copyright (c) 2026 jinpy.he. MIT license retained at original/LICENSE.
+
+All 1912 files from the user-provided source snapshot are retained under original/.
+Two .cmd files use CRLF instead of the upstream Git blob's LF; their contents are
+otherwise identical. UPSTREAM.json records both Git blob ids and copied SHA256s.
+The full adapted Vue frontend is under frontend/. The original backend is reused
+without source modification. Official binary assets are pinned and verified by
+upstream-release-lock.json and scripts/setup-backend.mjs.
+
+Third-party code, artwork, licenses and notices in original/backend/vendor/,
+original/frontend/vendor/, original/assets/ and original/shared/ remain subject
+to their respective notices. In particular the Fig completion snapshot keeps
+its original MIT license and NOTICE.fig.txt. The generated client bundles the
+upstream npm dependencies; their license records are distributed in
+THIRD_PARTY_NPM.json. No claim of authorship is made for upstream code or assets.
+
+The DeepSeek Harness transport, host service, native integration, connection
+storage and new tests are supplied under the root MIT LICENSE.

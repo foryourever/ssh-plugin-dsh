@@ -1,0 +1,1796 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Run SSH command"
+    },
+    "description": "Run a non-interactive remote shell command over SSH. Quick Sudo is NOT applied; use ssh_exec_sudo for privileged commands. Catastrophic patterns (disk formatting, recursive system deletes, shutdown, raw device writes, SQL DROP) require confirmDestructive: true; read-only connections only accept whitelisted inspection commands (ls, cat, df, ps, systemctl status, journalctl, docker ps, ...). Hosts may abandon the wait after ~15s while the command keeps running remotely; for anything slow use ssh_run_bg + ssh_task_status. After a timeout the command may STILL be running: verify before rerunning.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "command": {
+          "description": "Shell command to execute",
+          "type": "string"
+        },
+        "confirmDestructive": {
+          "description": "Set true to allow a command recognized as destructive after human review",
+          "type": "boolean"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "runInTerminal": {
+          "description": "Run inside the user's visible DBX terminal so the command and its output are visible and interruptible (requires a saved connectionId). Set true when the task needs visibility, human oversight, or interactivity; elevated commands run only after the user approves them in the terminal. The connection-level terminal MCP mode (toggled in the DBX terminal toolbar) decides the default when this flag is omitted; off keeps the silent hidden channel",
+          "type": "boolean"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "timeoutSecs": {
+          "description": "Plugin-side wait cap in seconds (5-300, default 60); the host may abandon the wait earlier (~15s) while the command keeps running",
+          "type": "integer"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "name": "ssh_exec"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Run SSH command with sudo"
+    },
+    "description": "Run a remote shell command with sudo. The sudo password is piped over stdin and 2FA/TOTP prompts are answered automatically when a TOTP secret is available (inline arguments, or a shared Quick Sudo profile referenced by quickSudoProfile; explicit arguments win). Catastrophic patterns require confirmDestructive: true; refused outright on read-only connections. Same wait-cap caveat as ssh_exec: keep long privileged jobs under ssh_run_bg.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "command": {
+          "description": "Shell command to execute with sudo",
+          "type": "string"
+        },
+        "confirmDestructive": {
+          "description": "Set true to allow a command recognized as destructive after human review",
+          "type": "boolean"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "quickSudoProfile": {
+          "description": "Global Quick Sudo profile id or exact name supplying sudo password/TOTP/prompt defaults",
+          "type": "string"
+        },
+        "runInTerminal": {
+          "description": "Run inside the user's visible DBX terminal so the command and its output are visible and interruptible (requires a saved connectionId). Set true when the task needs visibility, human oversight, or interactivity; elevated commands run only after the user approves them in the terminal. The connection-level terminal MCP mode (toggled in the DBX terminal toolbar) decides the default when this flag is omitted; off keeps the silent hidden channel",
+          "type": "boolean"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "timeoutSecs": {
+          "description": "Plugin-side wait cap in seconds (5-300, default 90); the host may abandon the wait earlier (~15s) while the command keeps running",
+          "type": "integer"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "name": "ssh_exec_sudo"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Run SSH command on several connections"
+    },
+    "description": "Run one command on several saved connections and collect per-target results (hidden channel; never a visible terminal). targets: 1-10 connection references (connectionId or connectionName), deduplicated in order. mode: parallel (default) or sequential; stopOnError (sequential only) stops at the first failure. confirmDestructive: true covers catastrophic commands on every target; sudo is NOT available here - use single-target ssh_exec_sudo for escalation. Per target: read-only connections only accept whitelisted inspection commands; the host may abandon the wait after ~15s while commands keep running - for anything slow use ssh_run_bg.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "command": {
+          "description": "Shell command to run on every target",
+          "type": "string"
+        },
+        "confirmDestructive": {
+          "description": "Set true to allow a command recognized as catastrophic on all targets",
+          "type": "boolean"
+        },
+        "mode": {
+          "description": "parallel (default) runs all targets concurrently; sequential walks them in order",
+          "enum": [
+            "parallel",
+            "sequential"
+          ],
+          "type": "string"
+        },
+        "stopOnError": {
+          "description": "Sequential mode only: stop before the next target once one fails (default false)",
+          "type": "boolean"
+        },
+        "targets": {
+          "description": "Connection references (connectionId or connectionName); deduplicated preserving order",
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "type": "array"
+        },
+        "timeoutSecs": {
+          "description": "Plugin-side wait cap per target (5-300)",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "targets",
+        "command"
+      ],
+      "type": "object"
+    },
+    "name": "ssh_multi_exec"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Inject terminal input"
+    },
+    "description": "Inject raw input (interactive answers, Ctrl+C, escape sequences) into the connection's LIVE DBX terminal so the human can watch it happen; the terminal must already be open. Newlines fold to Enter (\\r), NUL is stripped, input capped at 8 KiB. appendNewline (default false) appends one Enter - set it to run a typed command, leave it off for prompt answers or control keys. Output is NOT collected; for captured output use ssh_exec with runInTerminal: true. Gates: read-only connections only accept control-only input; catastrophic lines require confirmDestructive: true; sudo lines must match the connection's sudo whitelist when one is configured.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "appendNewline": {
+          "description": "Append one Enter after the input (default false; interactive answers usually carry their own \\r)",
+          "type": "boolean"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "confirmDestructive": {
+          "description": "Set true to allow a line recognized as a catastrophic pattern",
+          "type": "boolean"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "input": {
+          "description": "Raw terminal input to inject; newlines fold to Enter (\\r)",
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "input"
+      ],
+      "type": "object"
+    },
+    "name": "ssh_terminal_input"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Start background SSH task"
+    },
+    "description": "Start a long-running command detached on the remote host (nohup; output appended to a per-task log inside the server's temp directory, e.g. /tmp/dbx-ssh-tasks.XXXXXXXXXX/<taskId>.log) and return immediately with taskId/pid/logPath. The task directory is created with mktemp -d (mode 0700, random name) so the server's own tmp cleanup reclaims it automatically once the job is done. Survives disconnects, host wait caps, and session restarts because the output lives on the server. Poll with ssh_task_status(logPath). Same safety gates as ssh_exec: destructive patterns need confirmDestructive: true, read-only connections refuse it.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "command": {
+          "description": "Shell command to run detached",
+          "type": "string"
+        },
+        "confirmDestructive": {
+          "description": "Set true to allow a command recognized as destructive after human review",
+          "type": "boolean"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "name": "ssh_run_bg"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Poll background SSH task"
+    },
+    "description": "Poll a background task started with ssh_run_bg: returns state (running/done/missing), exit code once finished, pid liveness, and the trailing bytes of the server-side log file. Reconnects transparently, so it works after disconnects or from a later session.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "logPath": {
+          "description": "logPath returned by ssh_run_bg",
+          "type": "string"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "tailBytes": {
+          "description": "Trailing bytes of output to return (200-16000, default 4000)",
+          "type": "integer"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "logPath"
+      ],
+      "type": "object"
+    },
+    "name": "ssh_task_status"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Close SSH connection"
+    },
+    "description": "Close the cached SSH/SFTP connection for a host after finishing work.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "name": "ssh_close"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List known hosts"
+    },
+    "description": "List entries of the plugin's known_hosts store (the system ~/.ssh/known_hosts is never modified).",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {},
+      "type": "object"
+    },
+    "name": "ssh_list_known_hosts"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List SSH connections"
+    },
+    "description": "List the DBX app's saved SSH connections for this plugin (id, name, host, port, username, authentication method, read-only flag) merged with connections registered in this MCP session. Metadata only: credentials are never included. Use an entry's id as connectionId, its name as connectionName, or its host+port+username as an endpoint reference; a unique endpoint match reuses the saved connection without inline credentials.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {},
+      "type": "object"
+    },
+    "name": "ssh_list_connections"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Remove known host"
+    },
+    "description": "Remove entries for host:port from the plugin's known_hosts store; use after a legitimate server reinstall.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "host": {
+          "description": "Host name as recorded",
+          "type": "string"
+        },
+        "port": {
+          "description": "Port (default 22)",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "host"
+      ],
+      "type": "object"
+    },
+    "name": "ssh_remove_known_host"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "List remote directory"
+    },
+    "description": "List a remote directory over SFTP. Names follow the connection's file-name encoding: on latin-1 connections entries are decoded from raw server bytes to display form, and a returned path passed back to other SFTP tools addresses the same server bytes.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Remote directory path",
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "sftp_list_dir"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Stat remote path"
+    },
+    "description": "Inspect a remote path over SFTP (size, permissions, timestamps).",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Remote path",
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "sftp_stat"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Upload file over SFTP"
+    },
+    "description": "Upload a local file to the remote server over SFTP (single file, no recursion). The local file must be readable by the MCP server process; size is capped by maxUploadBytes.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "localPath": {
+          "description": "Local file path to upload",
+          "type": "string"
+        },
+        "overwrite": {
+          "description": "Set true to replace an existing remote file",
+          "type": "boolean"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "remotePath": {
+          "description": "Remote file path to create",
+          "type": "string"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "localPath",
+        "remotePath"
+      ],
+      "type": "object"
+    },
+    "name": "sftp_upload"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Download file over SFTP"
+    },
+    "description": "Download a remote file to a local path over SFTP (single file). Remote size is capped by maxDownloadBytes; missing local parent directories are created. Shell/cron/systemd bootstrap paths are refused as local targets; on read-only connections credential paths are refused as remote sources.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "localPath": {
+          "description": "Local target file path",
+          "type": "string"
+        },
+        "overwrite": {
+          "description": "Set true to replace an existing local file",
+          "type": "boolean"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "remotePath": {
+          "description": "Remote file path to download",
+          "type": "string"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "remotePath",
+        "localPath"
+      ],
+      "type": "object"
+    },
+    "name": "sftp_download"
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": true,
+      "readOnlyHint": true,
+      "title": "Read remote file"
+    },
+    "description": "Read a remote file (text by default, or base64). Truncates at maxBytes; default and ceiling come from the plugin's MCP size settings. Pass offset to resume from a byte position (empty result at/after EOF).",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "base64": {
+          "description": "Set true to return base64 instead of UTF-8 text",
+          "type": "boolean"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "maxBytes": {
+          "description": "Maximum bytes to read; clamped to maxDownloadBytes (base64 field ignored)",
+          "type": "integer"
+        },
+        "offset": {
+          "description": "Byte offset to start reading from (default 0)",
+          "type": "integer"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Remote file path",
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path"
+      ],
+      "type": "object"
+    },
+    "name": "sftp_read_file"
+  },
+  {
+    "annotations": {
+      "destructiveHint": true,
+      "idempotentHint": false,
+      "openWorldHint": true,
+      "readOnlyHint": false,
+      "title": "Write remote file"
+    },
+    "description": "Write a remote file with UTF-8 content. Existing files require overwrite=true; content is capped by maxUploadBytes.",
+    "inputSchema": {
+      "anyOf": [
+        {
+          "required": [
+            "connectionId"
+          ]
+        },
+        {
+          "required": [
+            "connectionName"
+          ]
+        },
+        {
+          "required": [
+            "host",
+            "username"
+          ]
+        }
+      ],
+      "properties": {
+        "agentSocket": {
+          "type": "string"
+        },
+        "authFlowMode": {
+          "description": "2FA sudo flow: password_only (no OTP), password_plus_otp (combined prompt), password_then_otp (separate; default); unknown values fall back to the default",
+          "enum": [
+            "password_only",
+            "password_plus_otp",
+            "password_then_otp"
+          ],
+          "type": "string"
+        },
+        "authentication": {
+          "description": "Auth for inline dials: password (default), private-key, private-key-password, or agent; omitted infers from privateKey*/password",
+          "enum": [
+            "password",
+            "private-key",
+            "private-key-password",
+            "agent"
+          ],
+          "type": "string"
+        },
+        "connectTimeoutSecs": {
+          "description": "TCP connect timeout in seconds for inline dials (default 30, min 1)",
+          "type": "integer"
+        },
+        "connectionId": {
+          "description": "Saved DBX connection id (via ssh_list_connections)",
+          "type": "string"
+        },
+        "connectionName": {
+          "description": "Saved connection name (may replace connectionId); ambiguous matches are refused with candidates",
+          "type": "string"
+        },
+        "content": {
+          "description": "File content (UTF-8 text)",
+          "type": "string"
+        },
+        "host": {
+          "type": "string"
+        },
+        "jumpHosts": {
+          "description": "ProxyJump chain (up to 3): [{\"host\":\"bastion\",\"port\":22,\"username\":\"ops\",\"password\":\"…\"}]; replaces direct dialing",
+          "type": "array"
+        },
+        "overwrite": {
+          "description": "Set true to replace an existing file",
+          "type": "boolean"
+        },
+        "passphraseCommand": {
+          "description": "Local command; stdout is the key passphrase. Same placeholders as passwordCommand",
+          "type": "string"
+        },
+        "password": {
+          "description": "Login password (password auth, or sudo fallback)",
+          "type": "string"
+        },
+        "passwordCommand": {
+          "description": "Local command; stdout (minus newline) is the login password. Placeholders: %h %u %p %%; explicit args win",
+          "type": "string"
+        },
+        "passwordPromptHint": {
+          "type": "string"
+        },
+        "path": {
+          "description": "Remote file path",
+          "type": "string"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "privateKeyContent": {
+          "description": "Private key contents (OpenSSH/PEM/PPK); overrides privateKeyPath",
+          "type": "string"
+        },
+        "privateKeyPassphrase": {
+          "type": "string"
+        },
+        "privateKeyPath": {
+          "type": "string"
+        },
+        "sudoPassword": {
+          "description": "Sudo password override (defaults to password)",
+          "type": "string"
+        },
+        "totpPromptHint": {
+          "type": "string"
+        },
+        "totpSecret": {
+          "description": "TOTP secret (otpauth:// URI, base32, or static code) for 2FA auto-answer; newline/semicolon separated secrets auto-rotate",
+          "type": "string"
+        },
+        "triggers": {
+          "description": "Expect-style triggers, JSON or tssh text, e.g. {\"stages\":[{\"pattern\":\"(?i)code\",\"sendText\":\"654321\\\\r\"}]}; each stage replies when its regex matches PTY output; invalid rules fail the dial. A malicious server can fake prompts to harvest replies",
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "content"
+      ],
+      "type": "object"
+    },
+    "name": "sftp_write_file"
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "repository": "jinpy666/dbx-plugin-ssh",
+  "version": "0.7.13-beta.1",
+  "tag": "ssh-v0.7.13-beta.1",
+  "releaseUrl": "https://github.com/jinpy666/dbx-plugin-ssh/releases/tag/ssh-v0.7.13-beta.1",
+  "assets": {
+    "darwin-arm64": { "id": 698949089, "name": "io.dbx.ssh-0.7.13-beta.1-darwin-arm64.dbxp", "size": 19444594, "sha256": "e079df9a96550c4db9a4c783e40af2174d1fcf2997710da274e66ca006344507" },
+    "darwin-x64": { "id": 698949094, "name": "io.dbx.ssh-0.7.13-beta.1-darwin-x64.dbxp", "size": 20097135, "sha256": "84edac781416901090e2dcc2888df3dc2649535cdb54d0d98fd5865a537b603e" },
+    "linux-arm64": { "id": 698949093, "name": "io.dbx.ssh-0.7.13-beta.1-linux-arm64.dbxp", "size": 20658477, "sha256": "be9f2d76962bfb4a7522cabc3632c594d5b454e91e56ea81079265e59ea6dfb3" },
+    "linux-x64": { "id": 698949090, "name": "io.dbx.ssh-0.7.13-beta.1-linux-x64.dbxp", "size": 21148224, "sha256": "0b10955697293f6a5201c5d15ba5c368a826a2aa46cb3080e5e49149f36565e0" },
+    "win32-x64": { "id": 698949091, "name": "io.dbx.ssh-0.7.13-beta.1-windows-x64.dbxp", "size": 18887665, "sha256": "56f1aa57b671cec6d1ce91f9139b6c71bed51b2ab295b6814d805b155d98308e" }
+  }
+}

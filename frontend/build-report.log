@@ -1,0 +1,95 @@
+vite v8.3.0 building client environment for production...
+transforming...
+[plugin rolldown:vite-resolve] Module "fs" has been externalized for browser compatibility, imported by "/Users/shihao/myself/ssh_plugin/frontend/node_modules/trzsz/lib/trzsz.mjs". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "util" has been externalized for browser compatibility, imported by "/Users/shihao/myself/ssh_plugin/frontend/node_modules/trzsz/lib/trzsz.mjs". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+[plugin rolldown:vite-resolve] Module "child_process" has been externalized for browser compatibility, imported by "/Users/shihao/myself/ssh_plugin/frontend/node_modules/trzsz/lib/trzsz.mjs". See https://vite.dev/guide/troubleshooting.html#module-externalized-for-browser-compatibility for more details.
+✓ 4246 modules transformed.
+rendering chunks...
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m frontend/node_modules/@file-viewer/renderer-pdf/dist/vendor/pdfjs/legacy/build/pdf.mjs:15302:70 [38;5;246m][0m
+       [38;5;246m│[0m
+ [38;5;246m15302 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ms[0m[38;5;249m.[0m[38;5;249mg[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mB[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249ml[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mM[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m([0m[38;5;249m"[0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m"[0m[38;5;249m)[0m[38;5;249m.[0m[38;5;249mc[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mR[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m([0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m      │[0m                                                                      ─────┬─────  
+ [38;5;240m      │[0m                                                                           ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m      │[0m 
+ [38;5;240m      │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m───────╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m frontend/node_modules/@file-viewer/renderer-pdf/dist/vendor/pdfjs/legacy/build/pdf.mjs:15348:70 [38;5;246m][0m
+       [38;5;246m│[0m
+ [38;5;246m15348 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ms[0m[38;5;249m.[0m[38;5;249mg[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mB[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249ml[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mM[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m([0m[38;5;249m"[0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m"[0m[38;5;249m)[0m[38;5;249m.[0m[38;5;249mc[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mR[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m([0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m      │[0m                                                                      ─────┬─────  
+ [38;5;240m      │[0m                                                                           ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m      │[0m 
+ [38;5;240m      │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m───────╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m frontend/node_modules/@file-viewer/renderer-pdf/dist/vendor/pdfjs/legacy/build/pdf.mjs:20081:68 [38;5;246m][0m
+       [38;5;246m│[0m
+ [38;5;246m20081 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mp[0m[38;5;249mr[0m[38;5;249mo[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249ms[0m[38;5;249m.[0m[38;5;249mg[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mB[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249ml[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mn[0m[38;5;249mM[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m([0m[38;5;249m"[0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249m"[0m[38;5;249m)[0m[38;5;249m.[0m[38;5;249mc[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ma[0m[38;5;249mt[0m[38;5;249me[0m[38;5;249mR[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249mi[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249m([0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m      │[0m                                                                    ─────┬─────  
+ [38;5;240m      │[0m                                                                         ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m      │[0m 
+ [38;5;240m      │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m───────╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+      [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m frontend/node_modules/@file-viewer/renderer-pdf/dist/vendor/pdfjs/legacy/build/pdf.worker.mjs:9503:21 [38;5;246m][0m
+      [38;5;246m│[0m
+ [38;5;246m9503 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249m [0m[38;5;249m_[0m[38;5;249ms[0m[38;5;249mc[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mp[0m[38;5;249mt[0m[38;5;249mN[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m;[0m
+ [38;5;240m     │[0m                     ─────┬─────  
+ [38;5;240m     │[0m                          ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m     │[0m 
+ [38;5;240m     │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m──────╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+       [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m frontend/node_modules/@file-viewer/renderer-pdf/dist/vendor/pdfjs/legacy/build/pdf.worker.mjs:11572:21 [38;5;246m][0m
+       [38;5;246m│[0m
+ [38;5;246m11572 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249mv[0m[38;5;249ma[0m[38;5;249mr[0m[38;5;249m [0m[38;5;249m_[0m[38;5;249ms[0m[38;5;249mc[0m[38;5;249mr[0m[38;5;249mi[0m[38;5;249mp[0m[38;5;249mt[0m[38;5;249mN[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m;[0m
+ [38;5;240m      │[0m                     ─────┬─────  
+ [38;5;240m      │[0m                          ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m      │[0m 
+ [38;5;240m      │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m───────╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+   [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m frontend/node_modules/@file-viewer/pptx/dist/worker.js:8:31 [38;5;246m][0m
+   [38;5;246m│[0m
+ [38;5;246m8 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mU[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m [0m[38;5;249mU[0m[38;5;249mR[0m[38;5;249mL[0m[38;5;249m([0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m  │[0m                               ─────┬─────  
+ [38;5;240m  │[0m                                    ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m  │[0m 
+ [38;5;240m  │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m───╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+ - This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`. in frontend/node_modules/@file-viewer/pptx/dist/worker.js at 775172..775183
+ [38;5;240m │[0m 
+ [38;5;240m │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m frontend/node_modules/@file-viewer/pptx/dist/worker.js:37:29 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m37 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mq[0m[38;5;249mu[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m.[0m[38;5;249mo[0m[38;5;249mp[0m[38;5;249me[0m[38;5;249mn[0m[38;5;249m([0m[38;5;249m'[0m[38;5;249mG[0m[38;5;249mE[0m[38;5;249mT[0m[38;5;249m'[0m[38;5;249m,[0m[38;5;249m [0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m,[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m   │[0m                             ─────┬─────  
+ [38;5;240m   │[0m                                  ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m────╯[0m
+
+[33m[EMPTY_IMPORT_META] [0m`import.meta` may not be a valid syntax with the `iife` output format.
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m frontend/node_modules/@file-viewer/pptx/dist/worker.js:62:35 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m62 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mc[0m[38;5;249mo[0m[38;5;249mn[0m[38;5;249ms[0m[38;5;249mt[0m[38;5;249m [0m[38;5;249mm[0m[38;5;249mo[0m[38;5;249md[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249me[0m[38;5;249mU[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m [0m[38;5;249m=[0m[38;5;249m [0m[38;5;249mn[0m[38;5;249me[0m[38;5;249mw[0m[38;5;249m [0m[38;5;249mU[0m[38;5;249mR[0m[38;5;249mL[0m[38;5;249m([0mimport.meta[38;5;249m.[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249ml[0m[38;5;249m)[0m[38;5;249m;[0m
+ [38;5;240m   │[0m                                   ─────┬─────  
+ [38;5;240m   │[0m                                        ╰─────── This `import.meta` will be replaced with an empty object (`{}`) automatically. If this is desired, you can suppress this warning by adding `transform.define: { 'import.meta': {} }`. If `import.meta` needs to be kept as-is, you need to set the output format to `esm`.
+ [38;5;240m   │[0m 
+ [38;5;240m   │[0m [38;5;115mHelp[0m: If you want to polyfill `import.meta.url` like Rollup does, check out the Document: https://rolldown.rs/in-depth/non-esm-output-formats#well-known-import-meta-properties
+[38;5;246m────╯[0m
+
+✓ built in 2.10s
+Emitted assets: dbx-ssh-ui.iife.js, dbx-ssh-ui.css
+Built client.js (24.78 MiB), with isolated CSS and complete upstream workbench.
